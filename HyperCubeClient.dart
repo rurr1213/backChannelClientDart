@@ -11,12 +11,43 @@ class HyperCubeClient {
   final TcpManager tcpManager;
   bool hccOpen = false;
   String? ipAddress = "";
+  int ipPort = 0;
   int numReceivedMsgs = 0;
   int numSentMsgs = 0;
   Function(Uint8List)? onHostTcpReceiveCallback;
   Function()? onHostTcpCloseCallback;
 
   HyperCubeClient(this.logger) : tcpManager = TcpManager(logger);
+
+  Future<bool> init(Function(Uint8List) _onHostTcpReceiveCallback,
+      Function() _onHostTcpCloseCallback,
+      [String _remoteIpAddressString = "127.0.0.1", int _ipPort = 0]) async {
+    ipAddress = _remoteIpAddressString;
+    if (_ipPort != 0) ipPort = _ipPort;
+    if (ipPort == 0) return false;
+    onHostTcpReceiveCallback = _onHostTcpReceiveCallback;
+    onHostTcpCloseCallback = _onHostTcpCloseCallback;
+
+    if (!tcpManager.isOpen()) {
+      logger.add(EVENTTYPE.INFO, "HCCMgr",
+          "Opening Connection to Server(), at from $ipAddress");
+      hccOpen =
+          await tcpManager.open(onTcpReceive, onTcpClose, ipAddress, ipPort);
+      if (hccOpen) {
+        logger.add(EVENTTYPE.INFO, "HCCMgr",
+            "Openned Connection to Server(), at from $ipAddress");
+      }
+      //      if (hccOpen) {
+      //        Packet packet = Packet(d.data);
+      //        packetStreamCtrl.add(packet);
+      //      }
+    }
+    return hccOpen;
+  }
+
+  deinit() {
+    tcpManager.close();
+  }
 
   bool processSignallingMsgJson(String jsonString) {
     bool processed = false;
@@ -90,32 +121,5 @@ class HyperCubeClient {
     sendBinary(data, size);
     assert(size < bufferSize); // else buffer is too small
     return size != 0;
-  }
-
-  init(
-      String _remoteIpAddressString,
-      Function(Uint8List) _onHostTcpReceiveCallback,
-      Function() onHostTcpCloseCallback) async {
-    ipAddress = _remoteIpAddressString;
-    onHostTcpReceiveCallback = _onHostTcpReceiveCallback;
-    onHostTcpCloseCallback = onHostTcpCloseCallback;
-
-    if (!tcpManager.isOpen()) {
-      logger.add(EVENTTYPE.INFO, "HCCMgr",
-          "Opening Connection to Server(), at from $ipAddress");
-      hccOpen = await tcpManager.open(ipAddress, onTcpReceive, onTcpClose);
-      if (hccOpen) {
-        logger.add(EVENTTYPE.INFO, "HCCMgr",
-            "Openned Connection to Server(), at from $ipAddress");
-      }
-      //      if (hccOpen) {
-      //        Packet packet = Packet(d.data);
-      //        packetStreamCtrl.add(packet);
-      //      }
-    }
-  }
-
-  deinit() {
-    tcpManager.close();
   }
 }
