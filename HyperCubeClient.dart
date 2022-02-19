@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'dart:convert';
+import 'dart:async';
 
 import '../ftlTools/network/TcpMgr.dart';
 import '../ftlTools/network/CommonCppDartCode/Messages/MessagesCommon_generated.dart';
@@ -9,43 +10,78 @@ import '../ftlTools/Logger.dart';
 class HyperCubeClient {
   final Logger logger;
   final TcpManager tcpManager;
-  bool hccOpen = false;
+  bool connectionOpen = false;
   String? ipAddress = "";
   int ipPort = 0;
+  int numConnectionAttempts = 0;
   int numReceivedMsgs = 0;
   int numSentMsgs = 0;
   Function(Uint8List)? onHostTcpReceiveCallback;
   Function()? onHostTcpCloseCallback;
+  Timer? connectionTimer;
+  int _connectionPeriodSecs = 10;
+  bool alreadyWarnedOfConnectFailure = false;
 
   HyperCubeClient(this.logger) : tcpManager = TcpManager(logger);
 
-  Future<bool> init(Function(Uint8List) _onHostTcpReceiveCallback,
-      Function() _onHostTcpCloseCallback,
-      [String _remoteIpAddressString = "127.0.0.1", int _ipPort = 0]) async {
-    ipAddress = _remoteIpAddressString;
-    if (_ipPort != 0) ipPort = _ipPort;
-    if (ipPort == 0) return false;
-    onHostTcpReceiveCallback = _onHostTcpReceiveCallback;
-    onHostTcpCloseCallback = _onHostTcpCloseCallback;
-
+  Future<bool> openConnection() async {
+    connectionTimer = null;
     if (!tcpManager.isOpen()) {
-      logger.add(EVENTTYPE.INFO, "HCCMgr",
-          "Opening Connection to Server(), at from $ipAddress");
-      hccOpen =
-          await tcpManager.open(onTcpReceive, onTcpClose, ipAddress, ipPort);
-      if (hccOpen) {
-        logger.add(EVENTTYPE.INFO, "HCCMgr",
-            "Openned Connection to Server(), at from $ipAddress");
+      connectionOpen = await tcpManager.open(
+          onTcpReceive, onTcpClose, ipAddress, ipPort, false);
+      logger.setStateInt(
+          "HyperCubeClient-NumConnectionAttempt", ++numConnectionAttempts);
+
+      if (connectionOpen) {
+        logger.add(EVENTTYPE.INFO, "HyperCubeClient::openConnection()",
+            "Opened connection to $ipAddress:$ipPort");
+        alreadyWarnedOfConnectFailure = false;
+      } else {
+        if (!alreadyWarnedOfConnectFailure)
+          logger.add(EVENTTYPE.WARNING, "HyperCubeClient::openConnection()",
+              "connection failed to $ipAddress:$ipPort");
+        alreadyWarnedOfConnectFailure = true;
       }
       //      if (hccOpen) {
       //        Packet packet = Packet(d.data);
       //        packetStreamCtrl.add(packet);
       //      }
     }
-    return hccOpen;
+    return connectionOpen;
+  }
+
+  onConnectionTimer(Timer timer) async {
+    if (!connectionOpen) {
+      connectionOpen = await openConnection();
+    } else {
+      timer.cancel();
+    }
+  }
+
+  startPeriodicConnectionAttempts([bool startNow = false]) {
+    connectionTimer = Timer.periodic(
+        Duration(seconds: _connectionPeriodSecs), onConnectionTimer);
+    if (startNow) {
+      onConnectionTimer(Timer(Duration.zero, () {}));
+    }
+  }
+
+  bool init(Function(Uint8List) _onHostTcpReceiveCallback,
+      Function() _onHostTcpCloseCallback,
+      [String _remoteIpAddressString = "127.0.0.1", int _ipPort = 0]) {
+    ipAddress = _remoteIpAddressString;
+    if (_ipPort != 0) ipPort = _ipPort;
+    if (ipPort == 0) return false;
+    onHostTcpReceiveCallback = _onHostTcpReceiveCallback;
+    onHostTcpCloseCallback = _onHostTcpCloseCallback;
+
+    startPeriodicConnectionAttempts(true);
+
+    return true;
   }
 
   deinit() {
+    connectionTimer!.cancel();
     tcpManager.close();
   }
 
@@ -66,7 +102,9 @@ class HyperCubeClient {
         processed = true;
       }
     } catch (e) {
-      logger.add(EVENTTYPE.ERROR, "HCCMgr::processSignallingMsgJson()",
+      logger.add(
+          EVENTTYPE.ERROR,
+          "HyperCubeClient()::processSignallingMsgJson()",
           "field not found " + e.toString());
     }
     return processed;
@@ -92,7 +130,7 @@ class HyperCubeClient {
   }
 
   dynamic onTcpReceive(Uint8List event) {
-    logger.setStateInt("HCCMgr-NumReceivedMsgs", ++numReceivedMsgs);
+    logger.setStateInt("HyperCubeClient-NumReceivedMsgs", ++numReceivedMsgs);
 
     SerDes sdm = SerDes(event);
     Msg msg = Msg();
@@ -105,11 +143,16 @@ class HyperCubeClient {
   }
 
   dynamic onTcpClose() {
+    logger.add(EVENTTYPE.WARNING, "HyperCubeClient::onTcpClose()",
+        "connection to $ipAddress:$ipPort closed");
+
     onHostTcpCloseCallback!();
+    connectionOpen = false;
+    startPeriodicConnectionAttempts(); // try again
   }
 
   void sendBinary(List<int> data, [int size = 0]) {
-    logger.setStateInt("DeviceMgr-NumSentMsgs", ++numSentMsgs);
+    logger.setStateInt("HyperCubeClient-NumSentMsgs", ++numSentMsgs);
     tcpManager.sendBinary(data, size);
   }
 
