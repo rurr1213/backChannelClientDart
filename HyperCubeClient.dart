@@ -7,9 +7,114 @@ import '../ftlTools/network/CommonCppDartCode/Messages/MessagesCommon_generated.
 import '../ftlTools/network/SerDes.dart';
 import '../ftlTools/Logger.dart';
 
+class SignallingObject {
+  final Logger logger;
+  final HyperCubeClient hyperCubeClient;
+  String _groupName = "";
+  int _systemId = 0;
+
+  SignallingObject(this.logger, this.hyperCubeClient);
+
+  bool processMsgJson(String jsonString) {
+    bool processed = false;
+    try {
+      Map<String, dynamic> jsonData = jsonDecode(jsonString);
+      String command = jsonData["command"];
+      if (command == "localPing") {
+        logger.add(EVENTTYPE.INFO, "SignallingObject::processMsgJson()",
+            " received localPing $jsonString");
+        processed = true;
+      }
+      if (command == "echoData") {
+        String data = jsonData["data"];
+        Map jsonResponse = {"command": command, "data": data};
+        String jsonResponseString = jsonEncode(jsonResponse);
+        MsgCmd msgCmd = MsgCmd(jsonResponseString);
+        hyperCubeClient.sendMsg(msgCmd);
+        processed = true;
+      }
+    } catch (e) {
+      logger.add(
+          EVENTTYPE.ERROR,
+          "HyperCubeClient()::processSignallingMsgJson()",
+          "field not found " + e.toString());
+    }
+    return processed;
+  }
+
+  bool processMsg(Uint8List event) {
+    bool proceesed = false;
+    SerDes sdm = SerDes(event);
+    SigMsg sigMsg = SigMsg("");
+    sigMsg.deserialize(sdm);
+    switch (sigMsg.subSys) {
+      case SUBSYS_SIG:
+        switch (sigMsg.command) {
+          case SIG_JSON:
+            proceesed = processMsgJson(sigMsg.jsonData);
+            break;
+          default:
+        }
+        break;
+      default:
+    }
+    return proceesed;
+  }
+
+  onConnection() {
+    localPing();
+  }
+
+  onDisconnection() {}
+
+  bool sendSigMsg(
+      String jsonString, String callingFunctionName, String statusString) {
+    SigMsg sigMsg = SigMsg(jsonString);
+    bool stat = hyperCubeClient.sendMsg(sigMsg);
+
+    if (stat)
+      logger.add(
+          EVENTTYPE.INFO, callingFunctionName, statusString + " succeded");
+    else
+      logger.add(
+          EVENTTYPE.WARNING, callingFunctionName, statusString + " Failed");
+    return stat;
+  }
+
+  bool createGroup() {
+    String jsonString =
+        '{ "command": "createGroup"}, "systemId": $_systemId, groupName": $_groupName}';
+    return sendSigMsg(jsonString,
+        "HyperCubeClient::SignallingObject()::createGroup()", jsonString);
+  }
+
+  bool localPing() {
+    String pingData = "12345";
+    String jsonString =
+        '{"command": "localPing", "systemId": $_systemId, "data": $pingData}';
+    return sendSigMsg(jsonString,
+        "HyperCubeClient::SignallingObject()::localPing()", jsonString);
+  }
+
+  bool sendEcho() {
+    String echoData = "12345";
+    String jsonString = '{"command": "echoData", "data": $echoData}';
+    return sendSigMsg(jsonString,
+        "HyperCubeClient::SignallingObject()::sendEcho()", jsonString);
+  }
+
+  bool subscribe(int _groupId) {
+    String jsonString =
+        '{ {"command": "subscribe"}, {"systemId": $_systemId}, {"groupId": $_groupId}';
+    return sendSigMsg(jsonString,
+        "HyperCubeClient::SignallingObject()::subscribe()", jsonString);
+  }
+}
+
 class HyperCubeClient {
   final Logger logger;
   final TcpManager tcpManager;
+  SignallingObject? signallingObject;
   bool connectionOpen = false;
   String? ipAddress = "";
   int ipPort = 0;
@@ -22,7 +127,9 @@ class HyperCubeClient {
   int _connectionPeriodSecs = 10;
   bool alreadyWarnedOfConnectFailure = false;
 
-  HyperCubeClient(this.logger) : tcpManager = TcpManager(logger);
+  HyperCubeClient(this.logger) : tcpManager = TcpManager(logger) {
+    signallingObject = SignallingObject(logger, this);
+  }
 
   Future<bool> openConnection() async {
     connectionTimer = null;
@@ -36,6 +143,7 @@ class HyperCubeClient {
         logger.add(EVENTTYPE.INFO, "HyperCubeClient::openConnection()",
             "Opened connection to $ipAddress:$ipPort");
         alreadyWarnedOfConnectFailure = false;
+        onConnection();
       } else {
         if (!alreadyWarnedOfConnectFailure)
           logger.add(EVENTTYPE.WARNING, "HyperCubeClient::openConnection()",
@@ -66,6 +174,16 @@ class HyperCubeClient {
     }
   }
 
+  bool onConnection() {
+    signallingObject!.onConnection();
+    return true;
+  }
+
+  bool onDisconnection() {
+    signallingObject!.onDisconnection();
+    return true;
+  }
+
   bool init(Function(Uint8List) _onHostTcpReceiveCallback,
       Function() _onHostTcpCloseCallback,
       [String _remoteIpAddressString = "127.0.0.1", int _ipPort = 0]) {
@@ -85,58 +203,14 @@ class HyperCubeClient {
     tcpManager.close();
   }
 
-  bool processSignallingMsgJson(String jsonString) {
-    bool processed = false;
-    try {
-      Map<String, dynamic> jsonData = jsonDecode(jsonString);
-      String command = jsonData["command"];
-      if (command == "localPing") {
-        processed = true;
-      }
-      if (command == "echoData") {
-        String data = jsonData["data"];
-        Map jsonResponse = {"command": command, "data": data};
-        String jsonResponseString = jsonEncode(jsonResponse);
-        MsgCmd msgCmd = MsgCmd(jsonResponseString);
-        sendMsg(msgCmd);
-        processed = true;
-      }
-    } catch (e) {
-      logger.add(
-          EVENTTYPE.ERROR,
-          "HyperCubeClient()::processSignallingMsgJson()",
-          "field not found " + e.toString());
-    }
-    return processed;
-  }
-
-  bool processSignallingMsg(Uint8List event) {
-    bool proceesed = false;
-    SerDes sdm = SerDes(event);
-    SigMsg sigMsg = SigMsg("");
-    sigMsg.deserialize(sdm);
-    switch (sigMsg.subSys) {
-      case SUBSYS_SIG:
-        switch (sigMsg.command) {
-          case SIG_JSON:
-            proceesed = processSignallingMsgJson(sigMsg.jsonData);
-            break;
-          default:
-        }
-        break;
-      default:
-    }
-    return proceesed;
-  }
-
   dynamic onTcpReceive(Uint8List event) {
     logger.setStateInt("HyperCubeClient-NumReceivedMsgs", ++numReceivedMsgs);
 
     SerDes sdm = SerDes(event);
     Msg msg = Msg();
     msg.deserialize(sdm);
-    if ((msg.subSys == SUBSYS_SIG) && (msg.command != SIG_JSON)) {
-      processSignallingMsg(event);
+    if (msg.subSys == SUBSYS_SIG) {
+      signallingObject!.processMsg(event);
     } else {
       onHostTcpReceiveCallback!(event);
     }
@@ -145,7 +219,7 @@ class HyperCubeClient {
   dynamic onTcpClose() {
     logger.add(EVENTTYPE.WARNING, "HyperCubeClient::onTcpClose()",
         "connection to $ipAddress:$ipPort closed");
-
+    onDisconnection();
     onHostTcpCloseCallback!();
     connectionOpen = false;
     startPeriodicConnectionAttempts(); // try again
