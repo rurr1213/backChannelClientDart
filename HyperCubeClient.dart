@@ -15,6 +15,23 @@ class SignallingObject {
 
   SignallingObject(this.logger, this.hyperCubeClient);
 
+  setSystemId(int systemId) => _systemId = systemId;
+
+  onSubscribeAck(Map<String, dynamic> jsonData) {
+    int _systemId = jsonData["systemId"];
+    int _groupId = jsonData["groupId"];
+    bool _status = jsonData["status"];
+    logger.add(EVENTTYPE.INFO, "SignallingObject::onSubscribeAck()",
+        " received subscriberAck $_systemId group: $_groupId, status:$_status");
+  }
+
+  onSubscriber(Map<String, dynamic> jsonData) {
+    int _systemId = jsonData["systemId"];
+    int _groupId = jsonData["groupId"];
+    logger.add(EVENTTYPE.INFO, "SignallingObject::onSubscriber()",
+        " received subscriber $_systemId group: $_groupId");
+  }
+
   bool processMsgJson(String jsonString) {
     bool processed = false;
     try {
@@ -31,6 +48,14 @@ class SignallingObject {
         String jsonResponseString = jsonEncode(jsonResponse);
         MsgCmd msgCmd = MsgCmd(jsonResponseString);
         hyperCubeClient.sendMsg(msgCmd);
+        processed = true;
+      }
+      if (command == "subscriber") {
+        onSubscriber(jsonData);
+        processed = true;
+      }
+      if (command == "subscribeAck") {
+        onSubscribeAck(jsonData);
         processed = true;
       }
     } catch (e) {
@@ -62,7 +87,11 @@ class SignallingObject {
   }
 
   onConnection() {
+//    setSystemId(1231);
+    sendConnectionInfo("Vortex");
+    createGroup("vortexGroup");
     localPing();
+    //   subscribe("TeamPegasus");
   }
 
   onDisconnection() {}
@@ -81,31 +110,44 @@ class SignallingObject {
     return stat;
   }
 
-  bool createGroup() {
+  bool sendConnectionInfo(String connectioName) {
     String jsonString =
-        '{ "command": "createGroup"}, "systemId": $_systemId, groupName": $_groupName}';
+        '{"command": "connectionInfo", "connectionName": "$connectioName"}';
+    return sendSigMsg(
+        jsonString,
+        "HyperCubeClient::SignallingObject()::sendConnectionInfo()",
+        jsonString);
+  }
+
+  bool createGroup(String groupName) {
+    String jsonString = '{"command": "createGroup", "groupName": "$groupName"}';
     return sendSigMsg(jsonString,
         "HyperCubeClient::SignallingObject()::createGroup()", jsonString);
   }
 
   bool localPing() {
     String pingData = "12345";
-    String jsonString =
-        '{"command": "localPing", "systemId": $_systemId, "data": $pingData}';
+    String jsonString = '{"command": "localPing", "data": "$pingData"}';
     return sendSigMsg(jsonString,
         "HyperCubeClient::SignallingObject()::localPing()", jsonString);
   }
 
   bool sendEcho() {
     String echoData = "12345";
-    String jsonString = '{"command": "echoData", "data": $echoData}';
+    String jsonString = '{"command": "echoData", "data": "$echoData"}';
     return sendSigMsg(jsonString,
         "HyperCubeClient::SignallingObject()::sendEcho()", jsonString);
   }
 
-  bool subscribe(int _groupId) {
+  bool subscribe(String _groupName) {
+    String jsonString = '{"command": "subscribe", "groupName": "$_groupName"}';
+    return sendSigMsg(jsonString,
+        "HyperCubeClient::SignallingObject()::subscribe()", jsonString);
+  }
+
+  bool unsubscribe(String _groupName) {
     String jsonString =
-        '{ {"command": "subscribe"}, {"systemId": $_systemId}, {"groupId": $_groupId}';
+        '{"command": "unsubscribe", "groupName": "$_groupName"}';
     return sendSigMsg(jsonString,
         "HyperCubeClient::SignallingObject()::subscribe()", jsonString);
   }
