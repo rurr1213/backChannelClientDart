@@ -5,7 +5,9 @@ import 'dart:async';
 import '../ftlTools/network/TcpMgr.dart';
 import '../ftlTools/network/CommonCppDartCode/Messages/MessagesCommon_generated.dart';
 import '../ftlTools/network/SerDes.dart';
+import '../ftlTools/network/MsgExt.dart';
 import '../ftlTools/Logger.dart';
+import '../ftlTools/network/Packet.dart';
 
 class SignallingObject {
   final Logger logger;
@@ -17,19 +19,24 @@ class SignallingObject {
 
   setSystemId(int systemId) => _systemId = systemId;
 
-  onSubscribeAck(Map<String, dynamic> jsonData) {
-    int _systemId = jsonData["systemId"];
-    int _groupId = jsonData["groupId"];
+  onConnectionInfoAck(Map<String, dynamic> jsonData) {
     bool _status = jsonData["status"];
+    logger.add(EVENTTYPE.INFO, "SignallingObject::onConnectionInfoAck()",
+        " received onConnectionInfoAck status:$_status");
+  }
+
+  onSubscribeAck(Map<String, dynamic> jsonData) {
+    bool _status = jsonData["status"];
+    String _groupName = jsonData["groupName"];
     logger.add(EVENTTYPE.INFO, "SignallingObject::onSubscribeAck()",
-        " received subscriberAck $_systemId group: $_groupId, status:$_status");
+        " received subscriberAck $_systemId group: $_groupName, status:$_status");
   }
 
   onSubscriber(Map<String, dynamic> jsonData) {
-    int _systemId = jsonData["systemId"];
-    int _groupId = jsonData["groupId"];
+    String _groupName = jsonData["groupName"];
     logger.add(EVENTTYPE.INFO, "SignallingObject::onSubscriber()",
-        " received subscriber $_systemId group: $_groupId");
+        " received subscriber group: $_groupName");
+    onConnectionDataOpen();
   }
 
   bool processMsgJson(String jsonString) {
@@ -39,7 +46,18 @@ class SignallingObject {
       String command = jsonData["command"];
       if (command == "localPing") {
         logger.add(EVENTTYPE.INFO, "SignallingObject::processMsgJson()",
-            " received localPing $jsonString");
+            " received localPing response $jsonString");
+        processed = true;
+      }
+      if (command == "remotePing") {
+        if (jsonData["ack"] == true) {
+          logger.add(EVENTTYPE.INFO, "SignallingObject::processMsgJson()",
+              " received remotePing response $jsonString");
+        } else {
+          logger.add(EVENTTYPE.INFO, "SignallingObject::processMsgJson()",
+              " received remotePing request $jsonString");
+          remotePing(true, jsonData["data"]);
+        }
         processed = true;
       }
       if (command == "echoData") {
@@ -58,11 +76,13 @@ class SignallingObject {
         onSubscribeAck(jsonData);
         processed = true;
       }
+      if (command == "connectionInfoAck") {
+        onConnectionInfoAck(jsonData);
+        processed = true;
+      }
     } catch (e) {
-      logger.add(
-          EVENTTYPE.ERROR,
-          "HyperCubeClient()::processSignallingMsgJson()",
-          "field not found " + e.toString());
+      logger.add(EVENTTYPE.ERROR, "SignallingObject::processMsgJson()",
+          jsonString + ", field not found " + e.toString());
     }
     return processed;
   }
@@ -86,15 +106,29 @@ class SignallingObject {
     return proceesed;
   }
 
+  bool processHostMsg(MsgExt msg) {
+    return processMsg(msg.data);
+  }
+
   onConnection() {
 //    setSystemId(1231);
     sendConnectionInfo("Vortex");
-    createGroup("vortexGroup");
-    localPing();
+//    createGroup("vortexGroup");
+    subscribe("TeamPegasus");
+//    localPing();
     //   subscribe("TeamPegasus");
   }
 
   onDisconnection() {}
+
+  onConnectionDataOpen() {
+    remotePing();
+    hyperCubeClient.onConnectionDataOpen();
+  }
+
+  onConnectionDataClosed() {
+    hyperCubeClient.onConnectionDataClosed();
+  }
 
   bool sendSigMsg(
       String jsonString, String callingFunctionName, String statusString) {
@@ -125,15 +159,22 @@ class SignallingObject {
         "HyperCubeClient::SignallingObject()::createGroup()", jsonString);
   }
 
-  bool localPing() {
-    String pingData = "12345";
-    String jsonString = '{"command": "localPing", "data": "$pingData"}';
+  bool localPing([bool ack = false, String pingData = "localPingFromVortex"]) {
+    String jsonString =
+        '{"command": "localPing", "ack": $ack, "data": "$pingData"}';
     return sendSigMsg(jsonString,
         "HyperCubeClient::SignallingObject()::localPing()", jsonString);
   }
 
-  bool sendEcho() {
-    String echoData = "12345";
+  bool remotePing(
+      [bool ack = false, String pingData = "remotePingFromVortex"]) {
+    String jsonString =
+        '{"command": "remotePing", "ack": $ack, "data": "$pingData"}';
+    return sendSigMsg(jsonString,
+        "HyperCubeClient::SignallingObject()::remotePing()", jsonString);
+  }
+
+  bool echoData([String echoData = "data12345"]) {
     String jsonString = '{"command": "echoData", "data": "$echoData"}';
     return sendSigMsg(jsonString,
         "HyperCubeClient::SignallingObject()::sendEcho()", jsonString);
@@ -163,8 +204,6 @@ class HyperCubeClient {
   int numConnectionAttempts = 0;
   int numReceivedMsgs = 0;
   int numSentMsgs = 0;
-  Function(Uint8List)? onHostTcpReceiveCallback;
-  Function()? onHostTcpCloseCallback;
   Timer? connectionTimer;
   int _connectionPeriodSecs = 10;
   bool alreadyWarnedOfConnectFailure = false;
@@ -226,15 +265,14 @@ class HyperCubeClient {
     return true;
   }
 
-  bool init(Function(Uint8List) _onHostTcpReceiveCallback,
-      Function() _onHostTcpCloseCallback,
-      [String _remoteIpAddressString = "127.0.0.1", int _ipPort = 0]) {
+  onConnectionDataOpen() {}
+
+  onConnectionDataClosed() {}
+
+  bool init([String _remoteIpAddressString = "127.0.0.1", int _ipPort = 0]) {
     ipAddress = _remoteIpAddressString;
     if (_ipPort != 0) ipPort = _ipPort;
     if (ipPort == 0) return false;
-    onHostTcpReceiveCallback = _onHostTcpReceiveCallback;
-    onHostTcpCloseCallback = _onHostTcpCloseCallback;
-
     startPeriodicConnectionAttempts(true);
 
     return true;
@@ -248,13 +286,23 @@ class HyperCubeClient {
   dynamic onTcpReceive(Uint8List event) {
     logger.setStateInt("HyperCubeClient-NumReceivedMsgs", ++numReceivedMsgs);
 
-    SerDes sdm = SerDes(event);
-    Msg msg = Msg();
-    msg.deserialize(sdm);
+    //  SerDes sdm = SerDes(event);
+    //  Msg msg = Msg();
+    //  msg.deserialize(sdm);
+    //  if (msg.subSys == SUBSYS_SIG) {
+    //    signallingObject!.processMsg(event);
+    //  } else {
+//    onHostTcpReceiveCallback!(event);
+    Packet packet = Packet(event);
+    onPacket(packet);
+    //  }
+  }
+
+  onPacket(Packet packet) {}
+
+  onHostMsg(MsgExt msg) {
     if (msg.subSys == SUBSYS_SIG) {
-      signallingObject!.processMsg(event);
-    } else {
-      onHostTcpReceiveCallback!(event);
+      signallingObject!.processHostMsg(msg);
     }
   }
 
@@ -262,7 +310,6 @@ class HyperCubeClient {
     logger.add(EVENTTYPE.WARNING, "HyperCubeClient::onTcpClose()",
         "connection to $ipAddress:$ipPort closed");
     onDisconnection();
-    onHostTcpCloseCallback!();
     connectionOpen = false;
     startPeriodicConnectionAttempts(); // try again
   }
