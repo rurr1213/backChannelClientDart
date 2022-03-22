@@ -9,33 +9,68 @@ import '../ftlTools/network/MsgExt.dart';
 import '../ftlTools/Logger.dart';
 import '../ftlTools/network/Packet.dart';
 
+enum SignallingObjectState {
+  instantiated,
+  connected,
+  subscribed,
+  openForData,
+  inDataState,
+  outOfDataState,
+  closedForData,
+  disconnected
+}
+
 class SignallingObject {
   final Logger logger;
   final HyperCubeClient hyperCubeClient;
-  String _groupName = "";
+  int numRemotePingAcks = 0;
+  int numRemotePings = 0;
   int _systemId = 0;
+  SignallingObjectState state = SignallingObjectState.instantiated;
 
   SignallingObject(this.logger, this.hyperCubeClient);
 
   setSystemId(int systemId) => _systemId = systemId;
 
   onConnectionInfoAck(Map<String, dynamic> jsonData) {
+    SignallingObjectState prevState = state;
     bool _status = jsonData["status"];
+    state = SignallingObjectState.connected;
     logger.add(EVENTTYPE.INFO, "SignallingObject::onConnectionInfoAck()",
-        " received onConnectionInfoAck status:$_status");
+        " received onConnectionInfoAck status:$_status, state:$prevState>$state");
   }
 
   onSubscribeAck(Map<String, dynamic> jsonData) {
+    SignallingObjectState prevState = state;
     bool _status = jsonData["status"];
     String _groupName = jsonData["groupName"];
-    logger.add(EVENTTYPE.INFO, "SignallingObject::onSubscribeAck()",
-        " received subscriberAck $_systemId group: $_groupName, status:$_status");
+    if ((state == SignallingObjectState.connected) ||
+        (state == SignallingObjectState.subscribed) ||
+        (state == SignallingObjectState.openForData)) {
+      if (state == SignallingObjectState.connected)
+        state = SignallingObjectState.subscribed;
+      logger.add(EVENTTYPE.INFO, "SignallingObject::onSubscribeAck()",
+          " received subscriberAck $_systemId group: $_groupName, status:$_status, state:$prevState>$state");
+    } else {
+      logger.add(EVENTTYPE.ERROR, "SignallingObject::onSubscribeAck()",
+          " received subscriberAck in invalid state:$prevState>$state ");
+    }
   }
 
   onSubscriber(Map<String, dynamic> jsonData) {
+    SignallingObjectState prevState = state;
     String _groupName = jsonData["groupName"];
-    logger.add(EVENTTYPE.INFO, "SignallingObject::onSubscriber()",
-        " received subscriber group: $_groupName");
+    if ((state == SignallingObjectState.connected) ||
+        (state == SignallingObjectState.subscribed) ||
+        (state == SignallingObjectState.openForData)) {
+      if (state == SignallingObjectState.connected)
+        state = SignallingObjectState.subscribed;
+      logger.add(EVENTTYPE.INFO, "SignallingObject::onSubscriber()",
+          " received subscriber $_systemId group: $_groupName, state:$prevState>$state");
+    } else {
+      logger.add(EVENTTYPE.ERROR, "SignallingObject::onSubscriber()",
+          " received onSubscriber in invalid, state:$prevState>$state");
+    }
     onConnectionDataOpen();
   }
 
@@ -53,10 +88,14 @@ class SignallingObject {
         if (jsonData["ack"] == true) {
           logger.add(EVENTTYPE.INFO, "SignallingObject::processMsgJson()",
               " received remotePing response $jsonString");
+          logger.setStateInt(
+              "HyperCubeClient-numRemotePingAcks", ++numRemotePingAcks);
         } else {
           logger.add(EVENTTYPE.INFO, "SignallingObject::processMsgJson()",
               " received remotePing request $jsonString");
           remotePing(true, jsonData["data"]);
+          logger.setStateInt(
+              "HyperCubeClient-numRemotePings", ++numRemotePings);
         }
         processed = true;
       }
@@ -119,15 +158,25 @@ class SignallingObject {
     //   subscribe("TeamPegasus");
   }
 
-  onDisconnection() {}
+  onDisconnection() {
+    state = SignallingObjectState.disconnected;
+  }
 
   onConnectionDataOpen() {
     remotePing();
     hyperCubeClient.onConnectionDataOpen();
+    SignallingObjectState prevState = state;
+    state = SignallingObjectState.openForData;
+    logger.add(EVENTTYPE.INFO, "SignallingObject::onConnectionDataOpen()",
+        " state:$prevState>$state");
   }
 
   onConnectionDataClosed() {
     hyperCubeClient.onConnectionDataClosed();
+    SignallingObjectState prevState = state;
+    state = SignallingObjectState.closedForData;
+    logger.add(EVENTTYPE.INFO, "SignallingObject::onConnectionDataClosed()",
+        " state:$prevState>$state");
   }
 
   bool sendSigMsg(
@@ -202,8 +251,9 @@ class HyperCubeClient {
   String? ipAddress = "";
   int ipPort = 0;
   int numConnectionAttempts = 0;
-  int numReceivedMsgs = 0;
   int numSentMsgs = 0;
+  int numRecvMsgs = 0;
+  int numPacketsRecvd = 0;
   Timer? connectionTimer;
   int _connectionPeriodSecs = 10;
   bool alreadyWarnedOfConnectFailure = false;
@@ -214,6 +264,7 @@ class HyperCubeClient {
 
   Future<bool> openConnection() async {
     connectionTimer = null;
+
     if (!tcpManager.isOpen()) {
       connectionOpen = await tcpManager.open(
           onTcpReceive, onTcpClose, ipAddress, ipPort, false);
@@ -231,10 +282,6 @@ class HyperCubeClient {
               "connection failed to $ipAddress:$ipPort");
         alreadyWarnedOfConnectFailure = true;
       }
-      //      if (hccOpen) {
-      //        Packet packet = Packet(d.data);
-      //        packetStreamCtrl.add(packet);
-      //      }
     }
     return connectionOpen;
   }
@@ -256,6 +303,9 @@ class HyperCubeClient {
   }
 
   bool onConnection() {
+    numPacketsRecvd = 0;
+    numRecvMsgs = 0;
+    numSentMsgs = 0;
     signallingObject!.onConnection();
     return true;
   }
@@ -284,26 +334,59 @@ class HyperCubeClient {
   }
 
   dynamic onTcpReceive(Uint8List event) {
-    logger.setStateInt("HyperCubeClient-NumReceivedMsgs", ++numReceivedMsgs);
-
-    //  SerDes sdm = SerDes(event);
-    //  Msg msg = Msg();
-    //  msg.deserialize(sdm);
-    //  if (msg.subSys == SUBSYS_SIG) {
-    //    signallingObject!.processMsg(event);
-    //  } else {
-//    onHostTcpReceiveCallback!(event);
     Packet packet = Packet(event);
     onPacket(packet);
-    //  }
   }
 
-  onPacket(Packet packet) {}
+  onPacket(Packet packet) {
+    logger.setStateInt("HyperCubeClient-numPacketsRecvd", ++numPacketsRecvd);
+  }
 
-  onHostMsg(MsgExt msg) {
-    if (msg.subSys == SUBSYS_SIG) {
-      signallingObject!.processHostMsg(msg);
+  onMsg(MsgExt msg) {
+    logger.setStateInt("HyperCubeClient-numRecvMsgs", ++numRecvMsgs);
+  }
+
+  bool checkReadyToOpenForData() {
+    if (signallingObject!.state != SignallingObjectState.subscribed) {
+      logger.add(EVENTTYPE.ERROR, "HyperCubeClient::checkReadyToOpenForData()",
+          "inCorrect state  ${signallingObject!.state} ");
+      return false;
     }
+    return true;
+  }
+
+  bool checkReadyForData() {
+    if (signallingObject!.state != SignallingObjectState.inDataState) {
+      logger.add(EVENTTYPE.ERROR, "HyperCubeClient::checkReadyForData()",
+          "inCorrect state  ${signallingObject!.state} ");
+      return false;
+    }
+    return true;
+  }
+
+  setStateAsData(bool yes) {
+    SignallingObjectState state = signallingObject!.state;
+    SignallingObjectState prevState = state;
+    if (yes) {
+      if (signallingObject!.state != SignallingObjectState.openForData) {
+        logger.add(EVENTTYPE.ERROR, "HyperCubeClient::setStateAsData()",
+            "inCorrect state  ${signallingObject!.state} ");
+      } else {
+        state = signallingObject!.state = SignallingObjectState.inDataState;
+        logger.add(EVENTTYPE.INFO, "HyperCubeClient::setStateAsData()",
+            " set state as in Data state:$prevState>$state");
+      }
+    } else {
+      if (signallingObject!.state != SignallingObjectState.closedForData) {
+        logger.add(EVENTTYPE.ERROR, "HyperCubeClient::setStateAsData()",
+            "inCorrect state  ${signallingObject!.state} ");
+      } else {
+        state = signallingObject!.state = SignallingObjectState.outOfDataState;
+        logger.add(EVENTTYPE.INFO, "HyperCubeClient::setStateAsData()",
+            " set state as in Data state:$prevState>$state");
+      }
+    }
+    return true;
   }
 
   dynamic onTcpClose() {
