@@ -42,17 +42,17 @@ class BackChannelClient extends HyperCubeClient {
   }
 
   @override
-  onMsg(MsgExt msg) {
-    super.onMsg(msg);
-    switch (msg.subSys) {
+  onMsg(MsgExt msgExt) {
+    super.onMsg(msgExt);
+    switch (msgExt.getMsg().subSys) {
       case SUBSYS_SIG:
-        signallingObject!.processHostMsg(msg);
+        signallingObject!.processHostMsg(msgExt);
         break;
       case SUBSYS_DISCOVERY:
         {
-          switch (msg.command) {
+          switch (msgExt.getMsg().command) {
             case DISCOVERY_HELLO:
-              bool status = backChannelHost.onBackChannelOpen(msg);
+              bool status = backChannelHost.onBackChannelOpen(msgExt);
               setStateAsData(status);
               break;
             case DISCOVERY_CLOSESOCKET:
@@ -65,7 +65,7 @@ class BackChannelClient extends HyperCubeClient {
       default:
         {
           // if (!checkReadyForData()) return;
-          backChannelHost.onBackChannelMsg(msg);
+          backChannelHost.onBackChannelMsg(msgExt);
         }
         break;
     }

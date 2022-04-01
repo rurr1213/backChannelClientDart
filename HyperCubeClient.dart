@@ -126,11 +126,9 @@ class SignallingObject {
     return processed;
   }
 
-  bool processMsg(Uint8List event) {
+  bool processMsg(MsgExt msgExt) {
     bool proceesed = false;
-    SerDes sdm = SerDes(event);
-    SigMsg sigMsg = SigMsg("");
-    sigMsg.deserialize(sdm);
+    SigMsg sigMsg = msgExt.getSigMsg();
     switch (sigMsg.subSys) {
       case SUBSYS_SIG:
         switch (sigMsg.command) {
@@ -145,8 +143,8 @@ class SignallingObject {
     return proceesed;
   }
 
-  bool processHostMsg(MsgExt msg) {
-    return processMsg(msg.data);
+  bool processHostMsg(MsgExt msgExt) {
+    return processMsg(msgExt);
   }
 
   onConnection() {
