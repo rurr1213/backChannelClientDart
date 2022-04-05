@@ -57,6 +57,16 @@ class SignallingObject {
     }
   }
 
+  onUnsubscribeAck(Map<String, dynamic> jsonData) {
+    SignallingObjectState prevState = state;
+    bool _status = jsonData["status"];
+    String _groupName = jsonData["groupName"];
+    state = SignallingObjectState.connected;
+    logger.add(EVENTTYPE.INFO, "SignallingObject::onSubscribeAck()",
+        " received subscriberAck $_systemId group: $_groupName, status:$_status, state:$prevState>$state");
+    if (state != SignallingObjectState.closedForData) onConnectionDataClosed();
+  }
+
   onSubscriber(Map<String, dynamic> jsonData) {
     SignallingObjectState prevState = state;
     String _groupName = jsonData["groupName"];
@@ -71,7 +81,16 @@ class SignallingObject {
       logger.add(EVENTTYPE.ERROR, "SignallingObject::onSubscriber()",
           " received onSubscriber in invalid, state:$prevState>$state");
     }
-    onConnectionDataOpen();
+    onConnectionDataOpen(_groupName);
+  }
+
+  onUnsubscriber(Map<String, dynamic> jsonData) {
+    SignallingObjectState prevState = state;
+    String _groupName = jsonData["groupName"];
+    state = SignallingObjectState.connected;
+    logger.add(EVENTTYPE.INFO, "SignallingObject::onUnsubscriber()",
+        " received subscriber $_systemId group: $_groupName, state:$prevState>$state");
+    onConnectionDataClosed();
   }
 
   bool processMsgJson(String jsonString) {
@@ -111,8 +130,16 @@ class SignallingObject {
         onSubscriber(jsonData);
         processed = true;
       }
+      if (command == "unsubscriber") {
+        onUnsubscriber(jsonData);
+        processed = true;
+      }
       if (command == "subscribeAck") {
         onSubscribeAck(jsonData);
+        processed = true;
+      }
+      if (command == "unsubscribeAck") {
+        onUnsubscribeAck(jsonData);
         processed = true;
       }
       if (command == "connectionInfoAck") {
@@ -151,7 +178,7 @@ class SignallingObject {
 //    setSystemId(1231);
     sendConnectionInfo("Vortex");
 //    createGroup("vortexGroup");
-    subscribe("TeamPegasus");
+//    subscribe("TeamPegasus");
 //    localPing();
     //   subscribe("TeamPegasus");
   }
@@ -160,9 +187,9 @@ class SignallingObject {
     state = SignallingObjectState.disconnected;
   }
 
-  onConnectionDataOpen() {
+  onConnectionDataOpen(String _groupName) {
     remotePing();
-    hyperCubeClient.onConnectionDataOpen();
+    hyperCubeClient.onConnectionDataOpen(_groupName);
     SignallingObjectState prevState = state;
     state = SignallingObjectState.openForData;
     logger.add(EVENTTYPE.INFO, "SignallingObject::onConnectionDataOpen()",
@@ -228,6 +255,7 @@ class SignallingObject {
   }
 
   bool subscribe(String _groupName) {
+    if (state != SignallingObjectState.connected) return false;
     String jsonString = '{"command": "subscribe", "groupName": "$_groupName"}';
     return sendSigMsg(jsonString,
         "HyperCubeClient::SignallingObject()::subscribe()", jsonString);
@@ -254,6 +282,7 @@ class HyperCubeClient {
   int numPacketsRecvd = 0;
   Timer? connectionTimer;
   int _connectionPeriodSecs = 10;
+  String connectedGroupName = "";
   bool alreadyWarnedOfConnectFailure = false;
 
   HyperCubeClient(this.logger) : tcpManager = TcpManager(logger) {
@@ -313,7 +342,9 @@ class HyperCubeClient {
     return true;
   }
 
-  onConnectionDataOpen() {}
+  onConnectionDataOpen(String _groupName) {
+    connectedGroupName = _groupName;
+  }
 
   onConnectionDataClosed() {}
 
@@ -329,6 +360,14 @@ class HyperCubeClient {
   deinit() {
     connectionTimer!.cancel();
     tcpManager.close();
+  }
+
+  bool subscribe(String groupName) {
+    return signallingObject!.subscribe(groupName);
+  }
+
+  bool unsubscribe(String groupName) {
+    return signallingObject!.unsubscribe(groupName);
   }
 
   dynamic onTcpReceive(Uint8List event) {

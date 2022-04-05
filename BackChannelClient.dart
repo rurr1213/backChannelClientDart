@@ -6,6 +6,7 @@ import '../ftlTools/network/Packet.dart';
 import '../ftlTools/network/CommonCppDartCode/Messages/MessagesCommon_generated.dart';
 
 abstract class BackChannelHost {
+  onLocalChannelInfo(String groupName);
   bool onBackChannelOpen(MsgExt msgExt);
   onBackChannelMsg(MsgExt msgExt);
   bool onBackChannelClose();
@@ -84,8 +85,9 @@ class BackChannelClient extends HyperCubeClient {
   }
 
   @override
-  onConnectionDataOpen() {
-    super.onConnectionDataOpen();
+  onConnectionDataOpen(String groupName) {
+    super.onConnectionDataOpen(groupName);
+    backChannelHost.onLocalChannelInfo(groupName);
   }
 
   @override
