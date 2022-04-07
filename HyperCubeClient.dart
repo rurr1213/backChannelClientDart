@@ -64,7 +64,7 @@ class SignallingObject {
     state = SignallingObjectState.connected;
     logger.add(EVENTTYPE.INFO, "SignallingObject::onSubscribeAck()",
         " received subscriberAck $_systemId group: $_groupName, status:$_status, state:$prevState>$state");
-    if (state != SignallingObjectState.closedForData) onConnectionDataClosed();
+    //if (state != SignallingObjectState.closedForData) onConnectionDataClosed();
   }
 
   onSubscriber(Map<String, dynamic> jsonData) {

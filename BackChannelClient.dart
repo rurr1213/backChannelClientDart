@@ -6,10 +6,10 @@ import '../ftlTools/network/Packet.dart';
 import '../ftlTools/network/CommonCppDartCode/Messages/MessagesCommon_generated.dart';
 
 abstract class BackChannelHost {
-  onLocalChannelInfo(String groupName);
-  bool onBackChannelOpen(MsgExt msgExt);
+  onBackChannelInfo(String groupName);
+  bool onBackChannelOpenStream(MsgExt msgExt);
   onBackChannelMsg(MsgExt msgExt);
-  bool onBackChannelClose();
+  bool onBackChannelCloseStream();
 }
 
 class BackChannelClient extends HyperCubeClient {
@@ -53,12 +53,10 @@ class BackChannelClient extends HyperCubeClient {
         {
           switch (msgExt.getMsg().command) {
             case DISCOVERY_HELLO:
-              bool status = backChannelHost.onBackChannelOpen(msgExt);
-              setStateAsData(status);
+              onOpenStream(msgExt);
               break;
             case DISCOVERY_CLOSESOCKET:
-              bool status = backChannelHost.onBackChannelClose();
-              setStateAsData(!status);
+              onCloseStream();
               break;
           }
         }
@@ -87,11 +85,26 @@ class BackChannelClient extends HyperCubeClient {
   @override
   onConnectionDataOpen(String groupName) {
     super.onConnectionDataOpen(groupName);
-    backChannelHost.onLocalChannelInfo(groupName);
+    backChannelHost.onBackChannelInfo(groupName);
   }
 
   @override
   onConnectionDataClosed() {
-    backChannelHost.onBackChannelClose();
+    super.onConnectionDataClosed();
+    onCloseStream();
+  }
+
+  onOpenStream(MsgExt msgExt) {
+    if (signallingObject!.state != SignallingObjectState.inDataState) {
+      bool status = backChannelHost.onBackChannelOpenStream(msgExt);
+      setStateAsData(status);
+    }
+  }
+
+  onCloseStream() {
+    if (signallingObject!.state == SignallingObjectState.inDataState) {
+      bool status = backChannelHost.onBackChannelCloseStream();
+      setStateAsData(!status);
+    }
   }
 }
