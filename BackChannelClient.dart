@@ -63,8 +63,7 @@ class BackChannelClient extends HyperCubeClient {
         break;
       default:
         {
-          // if (!checkReadyForData()) return;
-          backChannelHost.onBackChannelMsg(msgExt);
+          onMsgForHost(msgExt);
         }
         break;
     }
@@ -79,7 +78,13 @@ class BackChannelClient extends HyperCubeClient {
   @override
   bool onDisconnection() {
     super.onDisconnection();
+    onCloseStream();
     return true;
+  }
+
+  onMsgForHost(MsgExt msgExt) {
+    // if (!checkReadyForData()) return;
+    backChannelHost.onBackChannelMsg(msgExt);
   }
 
   @override
@@ -102,7 +107,8 @@ class BackChannelClient extends HyperCubeClient {
   }
 
   onCloseStream() {
-    if (signallingObject!.state == SignallingObjectState.inDataState) {
+    if ((signallingObject!.state == SignallingObjectState.inDataState) ||
+        (signallingObject!.state == SignallingObjectState.disconnected)) {
       bool status = backChannelHost.onBackChannelCloseStream();
       setStateAsData(!status);
     }

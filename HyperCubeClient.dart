@@ -279,13 +279,12 @@ class HyperCubeClient {
   int numConnectionAttempts = 0;
   int numSentMsgs = 0;
   int numRecvMsgs = 0;
-  int numPacketsRecvd = 0;
   Timer? connectionTimer;
   int _connectionPeriodSecs = 10;
   String connectedGroupName = "";
   bool alreadyWarnedOfConnectFailure = false;
 
-  HyperCubeClient(this.logger) : tcpManager = TcpManager(logger) {
+  HyperCubeClient(this.logger) : tcpManager = TcpManager("Hyper", logger) {
     signallingObject = SignallingObject(logger, this);
   }
 
@@ -297,6 +296,8 @@ class HyperCubeClient {
           onTcpReceive, onTcpClose, ipAddress, ipPort, false);
       logger.setStateInt(
           "HyperCubeClient-NumConnectionAttempt", ++numConnectionAttempts);
+      logger.setStateString("HyperCubeClient-ConnectionState",
+          connectionOpen ? "connected" : "disconnected");
 
       if (connectionOpen) {
         logger.add(EVENTTYPE.INFO, "HyperCubeClient::openConnection()",
@@ -330,7 +331,6 @@ class HyperCubeClient {
   }
 
   bool onConnection() {
-    numPacketsRecvd = 0;
     numRecvMsgs = 0;
     numSentMsgs = 0;
     signallingObject!.onConnection();
@@ -375,12 +375,10 @@ class HyperCubeClient {
     onPacket(packet);
   }
 
-  onPacket(Packet packet) {
-    logger.setStateInt("HyperCubeClient-numPacketsRecvd", ++numPacketsRecvd);
-  }
+  onPacket(Packet packet) {}
 
   onMsg(MsgExt msg) {
-    logger.setStateInt("HyperCubeClient-numRecvMsgs", ++numRecvMsgs);
+    logger.setStateInt("HyperCubeClient-NumRecvMsgs", ++numRecvMsgs);
   }
 
   bool checkReadyToOpenForData() {
@@ -405,22 +403,30 @@ class HyperCubeClient {
     SignallingObjectState state = signallingObject!.state;
     SignallingObjectState prevState = state;
     if (yes) {
-      if (signallingObject!.state != SignallingObjectState.openForData) {
-        logger.add(EVENTTYPE.ERROR, "HyperCubeClient::setStateAsData()",
-            "inCorrect state  ${signallingObject!.state} ");
-      } else {
-        state = signallingObject!.state = SignallingObjectState.inDataState;
-        logger.add(EVENTTYPE.INFO, "HyperCubeClient::setStateAsData()",
-            " set state as in Data state:$prevState>$state");
+      switch (signallingObject!.state) {
+        case SignallingObjectState.openForData:
+          state = signallingObject!.state = SignallingObjectState.inDataState;
+          logger.add(EVENTTYPE.INFO, "HyperCubeClient::setStateAsData()",
+              " set state as in Data state:$prevState>$state");
+          break;
+        default:
+          logger.add(EVENTTYPE.WARNING, "HyperCubeClient::setStateAsData()",
+              "inCorrect state  ${signallingObject!.state} ");
+          break;
       }
     } else {
-      if (signallingObject!.state != SignallingObjectState.closedForData) {
-        logger.add(EVENTTYPE.ERROR, "HyperCubeClient::setStateAsData()",
-            "inCorrect state  ${signallingObject!.state} ");
-      } else {
-        state = signallingObject!.state = SignallingObjectState.outOfDataState;
-        logger.add(EVENTTYPE.INFO, "HyperCubeClient::setStateAsData()",
-            " set state as in Data state:$prevState>$state");
+      switch (signallingObject!.state) {
+        case SignallingObjectState.disconnected:
+        case SignallingObjectState.closedForData:
+          state =
+              signallingObject!.state = SignallingObjectState.outOfDataState;
+          logger.add(EVENTTYPE.INFO, "HyperCubeClient::setStateAsData()",
+              " set state as in Data state:$prevState>$state");
+          break;
+        default:
+          logger.add(EVENTTYPE.WARNING, "HyperCubeClient::setStateAsData()",
+              "inCorrect state  ${signallingObject!.state} ");
+          break;
       }
     }
     return true;
@@ -431,6 +437,8 @@ class HyperCubeClient {
         "connection to $ipAddress:$ipPort closed");
     onDisconnection();
     connectionOpen = false;
+    logger.setStateString("HyperCubeClient-ConnectionState",
+        connectionOpen ? "connected" : "disconnected");
     startPeriodicConnectionAttempts(); // try again
   }
 
