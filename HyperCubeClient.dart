@@ -43,17 +43,21 @@ class SignallingObject {
   onSubscribeAck(Map<String, dynamic> jsonData) {
     SignallingObjectState prevState = state;
     bool _status = jsonData["status"];
-    String _groupName = jsonData["groupName"];
-    if ((state == SignallingObjectState.connected) ||
-        (state == SignallingObjectState.subscribed) ||
-        (state == SignallingObjectState.openForData)) {
-      if (state == SignallingObjectState.connected)
+    // String _groupName = jsonData["groupName"];
+
+    if (!_status) return;
+
+    switch (state) {
+      case SignallingObjectState.connected:
+      case SignallingObjectState.closedForData:
         state = SignallingObjectState.subscribed;
-      logger.add(EVENTTYPE.INFO, "SignallingObject::onSubscribeAck()",
-          " received subscriberAck $_systemId group: $_groupName, status:$_status, state:$prevState>$state");
-    } else {
-      logger.add(EVENTTYPE.ERROR, "SignallingObject::onSubscribeAck()",
-          " received subscriberAck in invalid state:$prevState>$state ");
+        break;
+      case SignallingObjectState.openForData:
+        break;
+      default:
+        logger.add(EVENTTYPE.ERROR, "SignallingObject::onSubscribeAck()",
+            " received subscriberAck in invalid state:$prevState>$state ");
+        break;
     }
   }
 
@@ -68,28 +72,37 @@ class SignallingObject {
   }
 
   onSubscriber(Map<String, dynamic> jsonData) {
+    bool stat = true;
     SignallingObjectState prevState = state;
     String _groupName = jsonData["groupName"];
-    if ((state == SignallingObjectState.connected) ||
-        (state == SignallingObjectState.subscribed) ||
-        (state == SignallingObjectState.openForData)) {
-      if (state == SignallingObjectState.connected)
-        state = SignallingObjectState.subscribed;
-      logger.add(EVENTTYPE.INFO, "SignallingObject::onSubscriber()",
-          " received subscriber $_systemId group: $_groupName, state:$prevState>$state");
-    } else {
-      logger.add(EVENTTYPE.ERROR, "SignallingObject::onSubscriber()",
-          " received onSubscriber in invalid, state:$prevState>$state");
+    switch (state) {
+      case SignallingObjectState.connected:
+      case SignallingObjectState.subscribed:
+      case SignallingObjectState.openForData:
+      case SignallingObjectState.closedForData:
+        state = SignallingObjectState.openForData;
+        break;
+      default:
+        stat = false;
+        logger.add(EVENTTYPE.ERROR, "SignallingObject::onSubscriber()",
+            " received onSubscriber in invalid, state:$prevState>$state");
+        break;
     }
-    onConnectionDataOpen(_groupName);
+    if (stat) onConnectionDataOpen(_groupName);
   }
 
   onUnsubscriber(Map<String, dynamic> jsonData) {
     SignallingObjectState prevState = state;
     String _groupName = jsonData["groupName"];
-    state = SignallingObjectState.connected;
     logger.add(EVENTTYPE.INFO, "SignallingObject::onUnsubscriber()",
         " received subscriber $_systemId group: $_groupName, state:$prevState>$state");
+    if (state != SignallingObjectState.closedForData) onConnectionDataClosed();
+  }
+
+  onClosedForData(Map<String, dynamic> jsonData) {
+    SignallingObjectState prevState = state;
+    logger.add(EVENTTYPE.INFO, "SignallingObject::onClosedForData()",
+        " received $_systemId state:$prevState>$state");
     onConnectionDataClosed();
   }
 
@@ -126,6 +139,10 @@ class SignallingObject {
         hyperCubeClient.sendMsg(msgCmd);
         processed = true;
       }
+      if (command == "connectionInfoAck") {
+        onConnectionInfoAck(jsonData);
+        processed = true;
+      }
       if (command == "subscriber") {
         onSubscriber(jsonData);
         processed = true;
@@ -142,8 +159,8 @@ class SignallingObject {
         onUnsubscribeAck(jsonData);
         processed = true;
       }
-      if (command == "connectionInfoAck") {
-        onConnectionInfoAck(jsonData);
+      if (command == "closedForData") {
+        onClosedForData(jsonData);
         processed = true;
       }
     } catch (e) {
@@ -255,7 +272,8 @@ class SignallingObject {
   }
 
   bool subscribe(String _groupName) {
-    if (state != SignallingObjectState.connected) return false;
+    if ((state != SignallingObjectState.connected) &&
+        (state != SignallingObjectState.closedForData)) return false;
     String jsonString = '{"command": "subscribe", "groupName": "$_groupName"}';
     return sendSigMsg(jsonString,
         "HyperCubeClient::SignallingObject()::subscribe()", jsonString);
@@ -418,6 +436,7 @@ class HyperCubeClient {
       switch (signallingObject!.state) {
         case SignallingObjectState.disconnected:
         case SignallingObjectState.closedForData:
+        case SignallingObjectState.inDataState:
           state =
               signallingObject!.state = SignallingObjectState.outOfDataState;
           logger.add(EVENTTYPE.INFO, "HyperCubeClient::setStateAsData()",
