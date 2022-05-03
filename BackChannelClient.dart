@@ -13,8 +13,8 @@ abstract class BackChannelHost {
 }
 
 class BackChannelClient extends HyperCubeClient {
-//  String remoteIpAddress = "192.168.1.216";
-  String remoteIpAddress = "3.141.6.1";
+  String remoteIpAddress = "192.168.1.216";
+//  String remoteIpAddress = "3.141.6.1";
   int remoteIpPort = 5054;
   late PacketCtrl packetCtrl;
   BackChannelHost backChannelHost;
@@ -108,6 +108,7 @@ class BackChannelClient extends HyperCubeClient {
 
   onCloseStream() {
     if ((signallingObject!.state == SignallingObjectState.inDataState) ||
+        (signallingObject!.state == SignallingObjectState.connected) ||
         (signallingObject!.state == SignallingObjectState.disconnected)) {
       bool status = backChannelHost.onBackChannelCloseStream();
       setStateAsData(!status);

@@ -45,7 +45,13 @@ class SignallingObject {
     bool _status = jsonData["status"];
     // String _groupName = jsonData["groupName"];
 
-    if (!_status) return;
+    if (!_status) {
+      logger.add(EVENTTYPE.WARNING, "SignallingObject::onSubscribeAck()",
+          " received onSubscribeAck FAIL status:$_status, state:$prevState>$state");
+      state = SignallingObjectState.connected;
+      onConnectionDataClosed();
+      return;
+    }
 
     switch (state) {
       case SignallingObjectState.connected:
@@ -97,6 +103,22 @@ class SignallingObject {
     logger.add(EVENTTYPE.INFO, "SignallingObject::onUnsubscriber()",
         " received subscriber $_systemId group: $_groupName, state:$prevState>$state");
     if (state != SignallingObjectState.closedForData) onConnectionDataClosed();
+  }
+
+  onGetGroupsAck(Map<String, dynamic> jsonData) {
+    SignallingObjectState prevState = state;
+    bool _status = jsonData["status"];
+    String _searchWord = jsonData["searchWord"];
+    List _groupInfoList = jsonData["groupInfoList"];
+
+    logger.add(EVENTTYPE.INFO, "SignallingObject::onGetGroupsAck()",
+        " received onGetGroupsAck $_systemId searchWord: $_searchWord, status:$_status, items: ${_groupInfoList.length} state:$prevState>$state");
+    _groupInfoList.forEach((element) {
+      String name = element["name"];
+      logger.add(EVENTTYPE.INFO, "SignallingObject::onGetGroupsAck()",
+          " groupInfo name $name ");
+    });
+    //if (state != SignallingObjectState.closedForData) onConnectionDataClosed();
   }
 
   onClosedForData(Map<String, dynamic> jsonData) {
@@ -159,6 +181,10 @@ class SignallingObject {
         onUnsubscribeAck(jsonData);
         processed = true;
       }
+      if (command == "getGroupsAck") {
+        onGetGroupsAck(jsonData);
+        processed = true;
+      }
       if (command == "closedForData") {
         onClosedForData(jsonData);
         processed = true;
@@ -198,6 +224,7 @@ class SignallingObject {
 //    subscribe("TeamPegasus");
 //    localPing();
     //   subscribe("TeamPegasus");
+    getGroups("Team");
   }
 
   onDisconnection() {
@@ -282,6 +309,13 @@ class SignallingObject {
   bool unsubscribe(String _groupName) {
     String jsonString =
         '{"command": "unsubscribe", "groupName": "$_groupName"}';
+    return sendSigMsg(jsonString,
+        "HyperCubeClient::SignallingObject()::subscribe()", jsonString);
+  }
+
+  bool getGroups(String _searchWord, {startingIndex = 0, maxItems = 10}) {
+    String jsonString =
+        '{"command": "getGroups", "searchWord": "$_searchWord", "startingIndex": $startingIndex, "maxItems":$maxItems }';
     return sendSigMsg(jsonString,
         "HyperCubeClient::SignallingObject()::subscribe()", jsonString);
   }
