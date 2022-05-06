@@ -13,26 +13,20 @@ abstract class BackChannelHost {
 }
 
 class BackChannelClient extends HyperCubeClient {
-  String remoteIpAddress = "192.168.1.216";
-//  String remoteIpAddress = "3.141.6.1";
-  int remoteIpPort = 5054;
   late PacketCtrl packetCtrl;
   BackChannelHost backChannelHost;
 
   BackChannelClient(Logger logger, this.backChannelHost) : super(logger) {
     packetCtrl = PacketCtrl(logger, onMsg);
   }
-  init([String _remoteIpAddressString = "", int _remoteIpPort = 0]) async {
-    if (_remoteIpAddressString != "") {
-      remoteIpAddress = _remoteIpAddressString;
-    }
-    if (_remoteIpPort != 0) {
-      remoteIpPort = _remoteIpPort;
-    }
 
+  init(
+      {String remoteIpAddressString = HyperCubeClient.DEFAULT_SERVERIP,
+      int remoteIpPort = HyperCubeClient.DEFAULT_SERVERPORT}) {
     packetCtrl.init();
-
-    return super.init(remoteIpAddress, remoteIpPort);
+    return super.init(
+        remoteIpAddressString: remoteIpAddressString,
+        remoteIpPort: remoteIpPort);
   }
 
   @override

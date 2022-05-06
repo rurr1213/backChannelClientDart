@@ -27,6 +27,7 @@ class SignallingObject {
   int numRemotePings = 0;
   int _systemId = 0;
   SignallingObjectState state = SignallingObjectState.instantiated;
+  ConnectionInfo connectionInfo = ConnectionInfo();
 
   SignallingObject(this.logger, this.hyperCubeClient);
 
@@ -219,7 +220,7 @@ class SignallingObject {
 
   onConnection() {
 //    setSystemId(1231);
-    sendConnectionInfo("Vortex");
+    sendConnectionInfo();
 //    createGroup("vortexGroup");
 //    subscribe("TeamPegasus");
 //    localPing();
@@ -262,9 +263,16 @@ class SignallingObject {
     return stat;
   }
 
-  bool sendConnectionInfo(String connectioName) {
-    String jsonString =
-        '{"command": "connectionInfo", "connectionName": "$connectioName"}';
+  bool sendConnectionInfo() {
+    connectionInfo.serverIpAddress = hyperCubeClient.ipAddress ?? "";
+
+    Map<String, dynamic> jConnectionInfoCmd = {
+      "command": "connectionInfo",
+      "connectionInfo": connectionInfo.toJson()
+    };
+
+    String jsonString = jsonEncode(jConnectionInfoCmd);
+
     return sendSigMsg(
         jsonString,
         "HyperCubeClient::SignallingObject()::sendConnectionInfo()",
@@ -326,7 +334,7 @@ class HyperCubeClient {
   final TcpManager tcpManager;
   SignallingObject? signallingObject;
   bool connectionOpen = false;
-  String? ipAddress = "";
+  String ipAddress = "";
   int ipPort = 0;
   int numConnectionAttempts = 0;
   int numSentMsgs = 0;
@@ -335,6 +343,9 @@ class HyperCubeClient {
   int _connectionPeriodSecs = 10;
   String connectedGroupName = "";
   bool alreadyWarnedOfConnectFailure = false;
+
+  static const String DEFAULT_SERVERIP = "127.0.0.1";
+  static const int DEFAULT_SERVERPORT = 5054;
 
   HyperCubeClient(this.logger) : tcpManager = TcpManager("Hyper", logger) {
     signallingObject = SignallingObject(logger, this);
@@ -400,9 +411,11 @@ class HyperCubeClient {
 
   onConnectionDataClosed() {}
 
-  bool init([String _remoteIpAddressString = "127.0.0.1", int _ipPort = 0]) {
-    ipAddress = _remoteIpAddressString;
-    if (_ipPort != 0) ipPort = _ipPort;
+  bool init(
+      {String remoteIpAddressString = DEFAULT_SERVERIP,
+      int remoteIpPort = DEFAULT_SERVERPORT}) {
+    ipAddress = remoteIpAddressString;
+    ipPort = remoteIpPort;
     if (ipPort == 0) return false;
     startPeriodicConnectionAttempts(true);
 
@@ -508,5 +521,9 @@ class HyperCubeClient {
     sendBinary(data, size);
     assert(size < bufferSize); // else buffer is too small
     return size != 0;
+  }
+
+  setConnectionInfo(ConnectionInfo connectionInfo) {
+    signallingObject!.connectionInfo = connectionInfo;
   }
 }
