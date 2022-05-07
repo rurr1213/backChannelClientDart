@@ -264,7 +264,7 @@ class SignallingObject {
   }
 
   bool sendConnectionInfo() {
-    connectionInfo.serverIpAddress = hyperCubeClient.ipAddress ?? "";
+    connectionInfo.serverIpAddress = hyperCubeClient.ipAddress;
 
     Map<String, dynamic> jConnectionInfoCmd = {
       "command": "connectionInfo",
