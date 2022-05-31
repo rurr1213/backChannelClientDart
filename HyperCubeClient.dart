@@ -1,9 +1,13 @@
+import 'dart:developer';
 import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:async';
 
+import 'package:quiver/iterables.dart';
+
 import '../ftlTools/network/TcpMgr.dart';
 import '../ftlTools/network/CommonCppDartCode/Messages/MessagesCommon_generated.dart';
+import '../ftlTools/network/CommonCppDartCode/Messages/HyperCubeMessagesCommon_generated.dart';
 import '../ftlTools/network/SerDes.dart';
 import '../ftlTools/network/MsgExt.dart';
 import '../ftlTools/Logger.dart';
@@ -33,25 +37,44 @@ class SignallingObject {
 
   setSystemId(int systemId) => _systemId = systemId;
 
-  onConnectionInfoAck(Map<String, dynamic> jsonData) {
+  bool onConnectionInfoAck(HyperCubeCommand hyperCubeCommand) {
     SignallingObjectState prevState = state;
-    bool _status = jsonData["status"];
+    bool _status = hyperCubeCommand.status;
+
+    ConnectionInfoAck connectionInfoAck = ConnectionInfoAck();
+    connectionInfoAck.fromJson(hyperCubeCommand.jsonData);
+
+    String alternateHyperCubeIp = connectionInfoAck.alternateHyperCubeIp;
     state = SignallingObjectState.connected;
     logger.add(EVENTTYPE.INFO, "SignallingObject::onConnectionInfoAck()",
-        " received onConnectionInfoAck status:$_status, state:$prevState>$state");
+        " received onConnectionInfoAck status:$_status, alternateIp: $alternateHyperCubeIp state:$prevState>$state");
+    return true;
   }
 
-  onSubscribeAck(Map<String, dynamic> jsonData) {
+  bool onCreateGroupAck(HyperCubeCommand hyperCubeCommand) {
     SignallingObjectState prevState = state;
-    bool _status = jsonData["status"];
-    // String _groupName = jsonData["groupName"];
+    bool _status = hyperCubeCommand.status;
+
+    GroupInfo groupInfo = GroupInfo();
+    groupInfo.fromJson(hyperCubeCommand.jsonData);
+
+    logger.add(EVENTTYPE.INFO, "SignallingObject::onCreatGroupAck()",
+        " received onCreatGroupAck status:$_status, state:$prevState>$state");
+    return true;
+  }
+
+  bool onSubscribeAck(HyperCubeCommand hyperCubeCommand) {
+    SignallingObjectState prevState = state;
+    bool _status = hyperCubeCommand.status;
+    SubscriberInfo subscriberInfo = SubscriberInfo();
+    subscriberInfo.fromJson(hyperCubeCommand.jsonData);
 
     if (!_status) {
       logger.add(EVENTTYPE.WARNING, "SignallingObject::onSubscribeAck()",
           " received onSubscribeAck FAIL status:$_status, state:$prevState>$state");
       state = SignallingObjectState.connected;
       onConnectionDataClosed();
-      return;
+      return true;
     }
 
     switch (state) {
@@ -66,22 +89,28 @@ class SignallingObject {
             " received subscriberAck in invalid state:$prevState>$state ");
         break;
     }
+    return true;
   }
 
-  onUnsubscribeAck(Map<String, dynamic> jsonData) {
+  bool onUnsubscribeAck(HyperCubeCommand hyperCubeCommand) {
     SignallingObjectState prevState = state;
-    bool _status = jsonData["status"];
-    String _groupName = jsonData["groupName"];
+    bool _status = hyperCubeCommand.status;
+    SubscriberInfo subscriberInfo = SubscriberInfo();
+    subscriberInfo.fromJson(hyperCubeCommand.jsonData);
+    String _groupName = subscriberInfo.groupName;
     state = SignallingObjectState.connected;
     logger.add(EVENTTYPE.INFO, "SignallingObject::onSubscribeAck()",
         " received subscriberAck $_systemId group: $_groupName, status:$_status, state:$prevState>$state");
     //if (state != SignallingObjectState.closedForData) onConnectionDataClosed();
+    return true;
   }
 
-  onSubscriber(Map<String, dynamic> jsonData) {
-    bool stat = true;
+  bool onSubscriber(HyperCubeCommand hyperCubeCommand) {
     SignallingObjectState prevState = state;
-    String _groupName = jsonData["groupName"];
+    bool stat = hyperCubeCommand.status;
+    SubscriberInfo subscriberInfo = SubscriberInfo();
+    subscriberInfo.fromJson(hyperCubeCommand.jsonData);
+    String _groupName = subscriberInfo.groupName;
     switch (state) {
       case SignallingObjectState.connected:
       case SignallingObjectState.subscribed:
@@ -96,99 +125,119 @@ class SignallingObject {
         break;
     }
     if (stat) onConnectionDataOpen(_groupName);
+    return true;
   }
 
-  onUnsubscriber(Map<String, dynamic> jsonData) {
+  bool onUnsubscriber(HyperCubeCommand hyperCubeCommand) {
     SignallingObjectState prevState = state;
-    String _groupName = jsonData["groupName"];
+    SubscriberInfo subscriberInfo = SubscriberInfo();
+    subscriberInfo.fromJson(hyperCubeCommand.jsonData);
+    String _groupName = subscriberInfo.groupName;
+
     logger.add(EVENTTYPE.INFO, "SignallingObject::onUnsubscriber()",
         " received subscriber $_systemId group: $_groupName, state:$prevState>$state");
     if (state != SignallingObjectState.closedForData) onConnectionDataClosed();
+    return true;
   }
 
-  onGetGroupsAck(Map<String, dynamic> jsonData) {
+  bool onGetGroupsAck(HyperCubeCommand hyperCubeCommand) {
     SignallingObjectState prevState = state;
-    bool _status = jsonData["status"];
-    String _searchWord = jsonData["searchWord"];
-    List _groupInfoList = jsonData["groupInfoList"];
-
+    bool _status = hyperCubeCommand.status;
+    GroupsInfoList getGroupsInfoList = GroupsInfoList();
+    if (hyperCubeCommand.jsonData != null) {
+      dynamic jgroupInfo = hyperCubeCommand.jsonData;
+      getGroupsInfoList.fromJson(jgroupInfo);
+    }
+    List<GroupInfo> _groupInfoList = getGroupsInfoList.list;
     logger.add(EVENTTYPE.INFO, "SignallingObject::onGetGroupsAck()",
-        " received onGetGroupsAck $_systemId searchWord: $_searchWord, status:$_status, items: ${_groupInfoList.length} state:$prevState>$state");
+        " received onGetGroupsAck status:$_status, items: ${_groupInfoList.length} state:$prevState>$state");
     _groupInfoList.forEach((element) {
-      String name = element["name"];
+      GroupInfo groupInfo = element;
+      String name = groupInfo.groupName;
       logger.add(EVENTTYPE.INFO, "SignallingObject::onGetGroupsAck()",
           " groupInfo name $name ");
     });
     //if (state != SignallingObjectState.closedForData) onConnectionDataClosed();
+    return true;
   }
 
-  onClosedForData(Map<String, dynamic> jsonData) {
+  bool onClosedForData(HyperCubeCommand hyperCubeCommand) {
     SignallingObjectState prevState = state;
     logger.add(EVENTTYPE.INFO, "SignallingObject::onClosedForData()",
         " received $_systemId state:$prevState>$state");
     onConnectionDataClosed();
+    return true;
+  }
+
+  bool onEchoData(HyperCubeCommand _hyperCubeCommand) {
+    return sendSigCommand(
+        _hyperCubeCommand.command, _hyperCubeCommand.jsonData, "onEchoData");
+  }
+
+  bool onRemotePing(HyperCubeCommand _hyperCubeCommand) {
+    bool stat = true;
+    String jsonString = _hyperCubeCommand.toString();
+    if (_hyperCubeCommand.ack == true) {
+      logger.add(EVENTTYPE.INFO, "SignallingObject::processMsgJson()",
+          " received remotePing response $jsonString");
+      logger.setStateInt(
+          "HyperCubeClient-numRemotePingAcks", ++numRemotePingAcks);
+    } else {
+      logger.add(EVENTTYPE.INFO, "SignallingObject::processMsgJson()",
+          " received remotePing request $jsonString");
+      stat = sendSigCommand(
+          _hyperCubeCommand.command, _hyperCubeCommand.jsonData, "onEchoData",
+          ack: true);
+      logger.setStateInt("HyperCubeClient-numRemotePings", ++numRemotePings);
+    }
+    return stat;
   }
 
   bool processMsgJson(String jsonString) {
     bool processed = false;
+    HyperCubeCommand hyperCubeCommand =
+        HyperCubeCommand(HYPERCUBECOMMANDS.NONE, null, true);
     try {
-      Map<String, dynamic> jsonData = jsonDecode(jsonString);
-      String command = jsonData["command"];
-      if (command == "localPing") {
-        logger.add(EVENTTYPE.INFO, "SignallingObject::processMsgJson()",
-            " received localPing response $jsonString");
-        processed = true;
-      }
-      if (command == "remotePing") {
-        if (jsonData["ack"] == true) {
+      hyperCubeCommand.fromJson(jsonDecode(jsonString));
+
+      switch (hyperCubeCommand.command) {
+        case HYPERCUBECOMMANDS.LOCALPING:
           logger.add(EVENTTYPE.INFO, "SignallingObject::processMsgJson()",
-              " received remotePing response $jsonString");
-          logger.setStateInt(
-              "HyperCubeClient-numRemotePingAcks", ++numRemotePingAcks);
-        } else {
-          logger.add(EVENTTYPE.INFO, "SignallingObject::processMsgJson()",
-              " received remotePing request $jsonString");
-          remotePing(true, jsonData["data"]);
-          logger.setStateInt(
-              "HyperCubeClient-numRemotePings", ++numRemotePings);
-        }
-        processed = true;
-      }
-      if (command == "echoData") {
-        String data = jsonData["data"];
-        Map jsonResponse = {"command": command, "data": data};
-        String jsonResponseString = jsonEncode(jsonResponse);
-        MsgCmd msgCmd = MsgCmd(jsonResponseString);
-        hyperCubeClient.sendMsg(msgCmd);
-        processed = true;
-      }
-      if (command == "connectionInfoAck") {
-        onConnectionInfoAck(jsonData);
-        processed = true;
-      }
-      if (command == "subscriber") {
-        onSubscriber(jsonData);
-        processed = true;
-      }
-      if (command == "unsubscriber") {
-        onUnsubscriber(jsonData);
-        processed = true;
-      }
-      if (command == "subscribeAck") {
-        onSubscribeAck(jsonData);
-        processed = true;
-      }
-      if (command == "unsubscribeAck") {
-        onUnsubscribeAck(jsonData);
-        processed = true;
-      }
-      if (command == "getGroupsAck") {
-        onGetGroupsAck(jsonData);
-        processed = true;
-      }
-      if (command == "closedForData") {
-        onClosedForData(jsonData);
-        processed = true;
+              " received localPing response $jsonString");
+          processed = true;
+          break;
+        case HYPERCUBECOMMANDS.REMOTEPING:
+          processed = onRemotePing(hyperCubeCommand);
+          break;
+        case HYPERCUBECOMMANDS.ECHODATA:
+          processed = onEchoData(hyperCubeCommand);
+          break;
+        case HYPERCUBECOMMANDS.CONNECTIONINFOACK:
+          processed = onConnectionInfoAck(hyperCubeCommand);
+          break;
+        case HYPERCUBECOMMANDS.CREATEGROUPACK:
+          processed = onCreateGroupAck(hyperCubeCommand);
+          break;
+        case HYPERCUBECOMMANDS.SUBSCRIBER:
+          processed = onSubscriber(hyperCubeCommand);
+          break;
+        case HYPERCUBECOMMANDS.UNSUBSCRIBER:
+          processed = onUnsubscriber(hyperCubeCommand);
+          break;
+        case HYPERCUBECOMMANDS.SUBSCRIBEACK:
+          processed = onSubscribeAck(hyperCubeCommand);
+          break;
+        case HYPERCUBECOMMANDS.UNSUBSCRIBEACK:
+          processed = onUnsubscribeAck(hyperCubeCommand);
+          break;
+        case HYPERCUBECOMMANDS.GETGROUPSACK:
+          processed = onGetGroupsAck(hyperCubeCommand);
+          break;
+        case HYPERCUBECOMMANDS.CLOSEDFORDATA:
+          processed = onClosedForData(hyperCubeCommand);
+          break;
+
+        default:
       }
     } catch (e) {
       logger.add(EVENTTYPE.ERROR, "SignallingObject::processMsgJson()",
@@ -249,6 +298,15 @@ class SignallingObject {
         " state:$prevState>$state");
   }
 
+  bool sendSigCommand(
+      HYPERCUBECOMMANDS command, dynamic data, String callingFunctionName,
+      {status = true, ack = false}) {
+    HyperCubeCommand hyperCubeCommand = HyperCubeCommand(command, data, status);
+    hyperCubeCommand.ack = ack;
+    String jsonString = jsonEncode(hyperCubeCommand.toJson());
+    return sendSigMsg(jsonString, callingFunctionName, jsonString);
+  }
+
   bool sendSigMsg(
       String jsonString, String callingFunctionName, String statusString) {
     SigMsg sigMsg = SigMsg(jsonString);
@@ -265,67 +323,56 @@ class SignallingObject {
 
   bool sendConnectionInfo() {
     connectionInfo.serverIpAddress = hyperCubeClient.ipAddress;
-
-    Map<String, dynamic> jConnectionInfoCmd = {
-      "command": "connectionInfo",
-      "connectionInfo": connectionInfo.toJson()
-    };
-
-    String jsonString = jsonEncode(jConnectionInfoCmd);
-
-    return sendSigMsg(
-        jsonString,
-        "HyperCubeClient::SignallingObject()::sendConnectionInfo()",
-        jsonString);
+    return sendSigCommand(HYPERCUBECOMMANDS.CONNECTIONINFO, connectionInfo,
+        "HyperCubeClient::SignallingObject()::sendConnectionInfo()");
   }
 
   bool createGroup(String groupName) {
-    String jsonString = '{"command": "createGroup", "groupName": "$groupName"}';
-    return sendSigMsg(jsonString,
-        "HyperCubeClient::SignallingObject()::createGroup()", jsonString);
+    GroupInfo groupInfo = GroupInfo();
+    groupInfo.groupName = groupName;
+    return sendSigCommand(HYPERCUBECOMMANDS.CREATEGROUP, groupInfo,
+        "HyperCubeClient::SignallingObject()::createGroup()");
   }
 
   bool localPing([bool ack = false, String pingData = "localPingFromVortex"]) {
-    String jsonString =
-        '{"command": "localPing", "ack": $ack, "data": "$pingData"}';
-    return sendSigMsg(jsonString,
-        "HyperCubeClient::SignallingObject()::localPing()", jsonString);
+    return sendSigCommand(HYPERCUBECOMMANDS.LOCALPING, pingData,
+        "HyperCubeClient::SignallingObject()::localPing()");
   }
 
   bool remotePing(
       [bool ack = false, String pingData = "remotePingFromVortex"]) {
-    String jsonString =
-        '{"command": "remotePing", "ack": $ack, "data": "$pingData"}';
-    return sendSigMsg(jsonString,
-        "HyperCubeClient::SignallingObject()::remotePing()", jsonString);
+    return sendSigCommand(HYPERCUBECOMMANDS.REMOTEPING, pingData,
+        "HyperCubeClient::SignallingObject()::remotePing()");
   }
 
   bool echoData([String echoData = "data12345"]) {
-    String jsonString = '{"command": "echoData", "data": "$echoData"}';
-    return sendSigMsg(jsonString,
-        "HyperCubeClient::SignallingObject()::sendEcho()", jsonString);
+    return sendSigCommand(HYPERCUBECOMMANDS.ECHODATA, echoData,
+        "HyperCubeClient::SignallingObject()::echoData()");
   }
 
   bool subscribe(String _groupName) {
     if ((state != SignallingObjectState.connected) &&
         (state != SignallingObjectState.closedForData)) return false;
-    String jsonString = '{"command": "subscribe", "groupName": "$_groupName"}';
-    return sendSigMsg(jsonString,
-        "HyperCubeClient::SignallingObject()::subscribe()", jsonString);
+    SubscriberInfo subscriberInfo = SubscriberInfo();
+    subscriberInfo.groupName = _groupName;
+    return sendSigCommand(HYPERCUBECOMMANDS.SUBSCRIBE, subscriberInfo,
+        "HyperCubeClient::SignallingObject()::subscribe()");
   }
 
   bool unsubscribe(String _groupName) {
-    String jsonString =
-        '{"command": "unsubscribe", "groupName": "$_groupName"}';
-    return sendSigMsg(jsonString,
-        "HyperCubeClient::SignallingObject()::subscribe()", jsonString);
+    SubscriberInfo subscriberInfo = SubscriberInfo();
+    subscriberInfo.groupName = _groupName;
+    return sendSigCommand(HYPERCUBECOMMANDS.UNSUBSCRIBE, subscriberInfo,
+        "HyperCubeClient::SignallingObject()::unsubscribe()");
   }
 
   bool getGroups(String _searchWord, {startingIndex = 0, maxItems = 10}) {
-    String jsonString =
-        '{"command": "getGroups", "searchWord": "$_searchWord", "startingIndex": $startingIndex, "maxItems":$maxItems }';
-    return sendSigMsg(jsonString,
-        "HyperCubeClient::SignallingObject()::subscribe()", jsonString);
+    GetGroupsInfo getGroupsInfo = GetGroupsInfo();
+    getGroupsInfo.searchWord = _searchWord;
+    getGroupsInfo.startingIndex = startingIndex;
+    getGroupsInfo.maxItems = maxItems;
+    return sendSigCommand(HYPERCUBECOMMANDS.GETGROUPS, getGroupsInfo,
+        "HyperCubeClient::SignallingObject()::getGroups()");
   }
 }
 
