@@ -1,9 +1,11 @@
 import 'package:base_app/backChannelClientDart/HyperCubeClient.dart';
+import 'SignallingObject.dart';
 import '../ftlTools/Logger.dart';
 import '../ftlTools/network/PacketCtrl.dart';
 import '../ftlTools/network/MsgExt.dart';
 import '../ftlTools/network/Packet.dart';
 import '../ftlTools/network/CommonCppDartCode/Messages/MessagesCommon_generated.dart';
+import '../ftlTools/network/CommonCppDartCode/Messages/HyperCubeMessagesCommon_generated.dart';
 
 abstract class BackChannelHost {
   onBackChannelInfo(String groupName);
