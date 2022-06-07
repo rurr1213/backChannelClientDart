@@ -110,4 +110,8 @@ class BackChannelClient extends HyperCubeClient {
       setStateAsData(!status);
     }
   }
+
+  bool searchForGroupsWithKeyword(String keyword) {
+    return signallingObject!.getGroups(keyword);
+  }
 }
