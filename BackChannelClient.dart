@@ -5,13 +5,13 @@ import '../ftlTools/network/PacketCtrl.dart';
 import '../ftlTools/network/MsgExt.dart';
 import '../ftlTools/network/Packet.dart';
 import '../ftlTools/network/CommonCppDartCode/Messages/MessagesCommon_generated.dart';
-import '../ftlTools/network/CommonCppDartCode/Messages/HyperCubeMessagesCommon_generated.dart';
 
 abstract class BackChannelHost {
   onBackChannelInfo(String groupName);
   bool onBackChannelOpenStream(MsgExt msgExt);
   onBackChannelMsg(MsgExt msgExt);
   bool onBackChannelCloseStream();
+  bool onBackChannelConnectionClosed();
 }
 
 class BackChannelClient extends HyperCubeClient {
