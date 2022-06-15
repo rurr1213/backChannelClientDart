@@ -5,6 +5,7 @@ import '../ftlTools/network/PacketCtrl.dart';
 import '../ftlTools/network/MsgExt.dart';
 import '../ftlTools/network/Packet.dart';
 import '../ftlTools/network/CommonCppDartCode/Messages/MessagesCommon_generated.dart';
+import 'package:firedart/firedart.dart';
 
 abstract class BackChannelHost {
   onBackChannelInfo(String groupName);
@@ -14,21 +15,82 @@ abstract class BackChannelHost {
   bool onBackChannelConnectionClosed();
 }
 
+class CloudConfigInfo {
+  static String MASTERIPADDRESS = "masterIpAddress";
+  static String MASTERIPPORT = "masterIpPort";
+  static String BACKUPIPADDRESS = "backupIpAddress";
+  static String BACKUPIPPORT = "backupIpPort";
+  String masterIpAddress = HyperCubeClient.DEFAULT_SERVERIP;
+  String backupIpAddress = HyperCubeClient.DEFAULT_SERVERIP;
+  int masterIpPort = HyperCubeClient.DEFAULT_SERVERPORT;
+  int backupIpPort = HyperCubeClient.DEFAULT_SERVERPORT;
+  Map<String, dynamic> toMap() {
+    return {
+      MASTERIPADDRESS: masterIpAddress,
+      MASTERIPPORT: masterIpPort,
+      BACKUPIPADDRESS: backupIpAddress,
+      BACKUPIPPORT: backupIpPort
+    };
+  }
+}
+
 class BackChannelClient extends HyperCubeClient {
   late PacketCtrl packetCtrl;
   BackChannelHost backChannelHost;
+  CloudConfigInfo cloudConfigInfo = CloudConfigInfo();
 
   BackChannelClient(Logger logger, this.backChannelHost) : super(logger) {
     packetCtrl = PacketCtrl(logger, onMsg);
   }
 
+  initCloudConfig() {
+    var collection = Firestore.instance.collection("HyperCube");
+    var document = collection.document("globalConfig");
+    CloudConfigInfo initCloudConfingInfo = CloudConfigInfo();
+    var map = initCloudConfingInfo.toMap();
+    document.update(map);
+  }
+
+  Future<bool> getCloudConfig(CloudConfigInfo _cloudConfigInfo) async {
+    bool found = false;
+    try {
+      var collection = Firestore.instance.collection("HyperCube");
+      DocumentReference documentReference = collection.document("globalConfig");
+
+      var config = await documentReference.get();
+      if (config.map.containsKey(CloudConfigInfo.MASTERIPADDRESS)) {
+        _cloudConfigInfo.masterIpAddress =
+            config.map[CloudConfigInfo.MASTERIPADDRESS];
+        found = true;
+      }
+      if (config.map.containsKey(CloudConfigInfo.MASTERIPPORT)) {
+        _cloudConfigInfo.masterIpPort =
+            config.map[CloudConfigInfo.MASTERIPPORT];
+      }
+      if (config.map.containsKey(CloudConfigInfo.BACKUPIPADDRESS)) {
+        _cloudConfigInfo.backupIpAddress =
+            config.map[CloudConfigInfo.BACKUPIPADDRESS];
+        found = true;
+      }
+      if (config.map.containsKey(CloudConfigInfo.BACKUPIPPORT)) {
+        _cloudConfigInfo.backupIpPort =
+            config.map[CloudConfigInfo.BACKUPIPPORT];
+      }
+    } catch (e) {
+      initCloudConfig();
+      found = false;
+    }
+    return found;
+  }
+
   init(
       {String remoteIpAddressString = HyperCubeClient.DEFAULT_SERVERIP,
-      int remoteIpPort = HyperCubeClient.DEFAULT_SERVERPORT}) {
+      int remoteIpPort = HyperCubeClient.DEFAULT_SERVERPORT}) async {
     packetCtrl.init();
+    await getCloudConfig(cloudConfigInfo);
     return super.init(
-        remoteIpAddressString: remoteIpAddressString,
-        remoteIpPort: remoteIpPort);
+        remoteIpAddressString: cloudConfigInfo.masterIpAddress,
+        remoteIpPort: cloudConfigInfo.masterIpPort);
   }
 
   @override
