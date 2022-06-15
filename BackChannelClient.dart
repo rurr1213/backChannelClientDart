@@ -16,20 +16,20 @@ abstract class BackChannelHost {
 }
 
 class CloudConfigInfo {
-  static String MASTERIPADDRESS = "masterIpAddress";
-  static String MASTERIPPORT = "masterIpPort";
-  static String BACKUPIPADDRESS = "backupIpAddress";
-  static String BACKUPIPPORT = "backupIpPort";
+  static String masterIpAddressKeyValue = "masterIpAddress";
+  static String masterIpPortKeyValue = "masterIpPort";
+  static String backupIpAddressKeyValue = "backupIpAddress";
+  static String backupIpPortKeyValue = "backupIpPort";
   String masterIpAddress = HyperCubeClient.DEFAULT_SERVERIP;
   String backupIpAddress = HyperCubeClient.DEFAULT_SERVERIP;
   int masterIpPort = HyperCubeClient.DEFAULT_SERVERPORT;
   int backupIpPort = HyperCubeClient.DEFAULT_SERVERPORT;
   Map<String, dynamic> toMap() {
     return {
-      MASTERIPADDRESS: masterIpAddress,
-      MASTERIPPORT: masterIpPort,
-      BACKUPIPADDRESS: backupIpAddress,
-      BACKUPIPPORT: backupIpPort
+      masterIpAddressKeyValue: masterIpAddress,
+      masterIpPortKeyValue: masterIpPort,
+      backupIpAddressKeyValue: backupIpAddress,
+      backupIpPortKeyValue: backupIpPort
     };
   }
 }
@@ -58,23 +58,23 @@ class BackChannelClient extends HyperCubeClient {
       DocumentReference documentReference = collection.document("globalConfig");
 
       var config = await documentReference.get();
-      if (config.map.containsKey(CloudConfigInfo.MASTERIPADDRESS)) {
+      if (config.map.containsKey(CloudConfigInfo.masterIpAddressKeyValue)) {
         _cloudConfigInfo.masterIpAddress =
-            config.map[CloudConfigInfo.MASTERIPADDRESS];
+            config.map[CloudConfigInfo.masterIpAddressKeyValue];
         found = true;
       }
-      if (config.map.containsKey(CloudConfigInfo.MASTERIPPORT)) {
+      if (config.map.containsKey(CloudConfigInfo.masterIpPortKeyValue)) {
         _cloudConfigInfo.masterIpPort =
-            config.map[CloudConfigInfo.MASTERIPPORT];
+            config.map[CloudConfigInfo.masterIpPortKeyValue];
       }
-      if (config.map.containsKey(CloudConfigInfo.BACKUPIPADDRESS)) {
+      if (config.map.containsKey(CloudConfigInfo.backupIpAddressKeyValue)) {
         _cloudConfigInfo.backupIpAddress =
-            config.map[CloudConfigInfo.BACKUPIPADDRESS];
+            config.map[CloudConfigInfo.backupIpAddressKeyValue];
         found = true;
       }
-      if (config.map.containsKey(CloudConfigInfo.BACKUPIPPORT)) {
+      if (config.map.containsKey(CloudConfigInfo.backupIpPortKeyValue)) {
         _cloudConfigInfo.backupIpPort =
-            config.map[CloudConfigInfo.BACKUPIPPORT];
+            config.map[CloudConfigInfo.backupIpPortKeyValue];
       }
     } catch (e) {
       initCloudConfig();
