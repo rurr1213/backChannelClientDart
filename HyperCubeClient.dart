@@ -189,9 +189,9 @@ class HyperCubeClient {
     startPeriodicConnectionAttempts(); // try again
   }
 
-  void sendBinary(List<int> data, [int size = 0]) {
+  bool sendBinary(List<int> data, [int size = 0]) {
     logger.setStateInt("HyperCubeClient-NumSentMsgs", ++numSentMsgs);
-    tcpManager.sendBinary(data, size);
+    return tcpManager.sendBinary(data, size);
   }
 
   bool sendMsg(Msg msg) {
