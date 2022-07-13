@@ -217,4 +217,13 @@ class HyperCubeClient {
     });
     return true;
   }
+
+  bool getConnectionInfo(List<String> _list) {
+    Map<String, dynamic> _map = signallingObject!.connectionInfoAck.toJson();
+    _map.forEach((key, value) {
+      _list.add("$key:$value");
+    });
+
+    return true;
+  }
 }

@@ -25,6 +25,7 @@ class SignallingObject {
   int _systemId = 0;
   SignallingObjectState state = SignallingObjectState.instantiated;
   ConnectionInfo connectionInfo = ConnectionInfo();
+  ConnectionInfoAck connectionInfoAck = ConnectionInfoAck();
 
   SignallingObject(this.logger, this.hyperCubeClient);
 
@@ -34,7 +35,6 @@ class SignallingObject {
     SignallingObjectState prevState = state;
     bool _status = hyperCubeCommand.status;
 
-    ConnectionInfoAck connectionInfoAck = ConnectionInfoAck();
     connectionInfoAck.fromJson(hyperCubeCommand.jsonData);
 
     String alternateHyperCubeIp = connectionInfoAck.alternateHyperCubeIp;
