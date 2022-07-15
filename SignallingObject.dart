@@ -149,6 +149,36 @@ class SignallingObject {
     return true;
   }
 
+  bool onLogLinesAck(HyperCubeCommand hyperCubeCommand) {
+    SignallingObjectState prevState = state;
+    bool _status = hyperCubeCommand.status;
+    LineList lineList = LineList();
+    if (hyperCubeCommand.jsonData != null) {
+      dynamic jgroupInfo = hyperCubeCommand.jsonData;
+      lineList.fromJson(jgroupInfo);
+      hyperCubeClient.onLogLines(lineList);
+    }
+    logger.add(EVENTTYPE.INFO, "SignallingObject::onLogLinesAck()",
+        " received onGetGroupsAck status:$_status, items: ${lineList.list.length} state:$prevState>$state");
+    //hyperCubeClient.onLogLinesList(lineList);
+    return true;
+  }
+
+  bool onStatusLinesAck(HyperCubeCommand hyperCubeCommand) {
+    SignallingObjectState prevState = state;
+    bool _status = hyperCubeCommand.status;
+    LineList lineList = LineList();
+    if (hyperCubeCommand.jsonData != null) {
+      dynamic jgroupInfo = hyperCubeCommand.jsonData;
+      lineList.fromJson(jgroupInfo);
+      hyperCubeClient.onStatusLines(lineList);
+    }
+    logger.add(EVENTTYPE.INFO, "SignallingObject::onStatusLinesAck()",
+        " received onGetGroupsAck status:$_status, items: ${lineList.list.length} state:$prevState>$state");
+    //hyperCubeClient.onLogLinesList(lineList);
+    return true;
+  }
+
   bool onClosedForData(HyperCubeCommand hyperCubeCommand) {
     SignallingObjectState prevState = state;
     logger.add(EVENTTYPE.INFO, "SignallingObject::onClosedForData()",
@@ -223,6 +253,12 @@ class SignallingObject {
           break;
         case HYPERCUBECOMMANDS.CLOSEDFORDATA:
           processed = onClosedForData(hyperCubeCommand);
+          break;
+        case HYPERCUBECOMMANDS.GETLOGLINESACK:
+          processed = onLogLinesAck(hyperCubeCommand);
+          break;
+        case HYPERCUBECOMMANDS.GETSTATUSACK:
+          processed = onStatusLinesAck(hyperCubeCommand);
           break;
 
         default:
@@ -361,5 +397,21 @@ class SignallingObject {
     getGroupsInfo.maxItems = maxItems;
     return sendSigCommand(HYPERCUBECOMMANDS.GETGROUPS, getGroupsInfo,
         "HyperCubeClient::SignallingObject()::getGroups()");
+  }
+
+  bool getLogLines(startingIndex, maxItems) {
+    LineList lineList = LineList();
+    lineList.startingIndex = startingIndex;
+    lineList.numItems = maxItems;
+    return sendSigCommand(HYPERCUBECOMMANDS.GETLOGLINES, lineList,
+        "HyperCubeClient::SignallingObject()::getLogLines()");
+  }
+
+  bool getStatusLines(startingIndex, maxItems) {
+    LineList lineList = LineList();
+    lineList.startingIndex = startingIndex;
+    lineList.numItems = maxItems;
+    return sendSigCommand(HYPERCUBECOMMANDS.GETSTATUS, lineList,
+        "HyperCubeClient::SignallingObject()::getStatusLines()");
   }
 }

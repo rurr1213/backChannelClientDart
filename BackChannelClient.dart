@@ -176,4 +176,12 @@ class BackChannelClient extends HyperCubeClient {
   bool searchForGroupsWithKeyword(String keyword) {
     return signallingObject!.getGroups(keyword);
   }
+
+  bool getLogLines([startingIndex = 0, maxItems = 10]) {
+    return signallingObject!.getLogLines(startingIndex, maxItems);
+  }
+
+  bool getStatusLines([startingIndex = 0, maxItems = 10]) {
+    return signallingObject!.getStatusLines(startingIndex, maxItems);
+  }
 }

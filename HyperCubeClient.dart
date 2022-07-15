@@ -218,6 +218,14 @@ class HyperCubeClient {
     return true;
   }
 
+  bool onLogLines(LineList _lineList) {
+    return true;
+  }
+
+  bool onStatusLines(LineList _lineList) {
+    return true;
+  }
+
   bool getConnectionInfo(List<String> _list) {
     Map<String, dynamic> _map = signallingObject!.connectionInfoAck.toJson();
     _map.forEach((key, value) {
