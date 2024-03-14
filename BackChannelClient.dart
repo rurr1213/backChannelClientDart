@@ -5,6 +5,7 @@ import '../ftlTools/network/PacketCtrl.dart';
 import '../ftlTools/network/MsgExt.dart';
 import '../ftlTools/network/Packet.dart';
 import '../ftlTools/network/CommonCppDartCode/Messages/MessagesCommon_generated.dart';
+import 'package:base_app/ftlTools/network/CommonCppDartCode/Messages/HyperCubeMessagesCommon_generated.dart';
 import 'package:firedart/firedart.dart';
 
 abstract class BackChannelHost {
@@ -16,20 +17,20 @@ abstract class BackChannelHost {
 }
 
 class CloudConfigInfo {
-  static String masterIpAddressKeyValue = "masterIpAddress";
-  static String masterIpPortKeyValue = "masterIpPort";
-  static String backupIpAddressKeyValue = "backupIpAddress";
-  static String backupIpPortKeyValue = "backupIpPort";
-  String masterIpAddress = HyperCubeClient.DEFAULT_SERVERIP;
-  String backupIpAddress = HyperCubeClient.DEFAULT_SERVERIP;
-  int masterIpPort = HyperCubeClient.DEFAULT_SERVERPORT;
-  int backupIpPort = HyperCubeClient.DEFAULT_SERVERPORT;
+  static String primaryKeyValue = "primaryServer";
+  static String primaryPortKeyValue = "primaryPort";
+  static String secondaryKeyValue = "secondaryServer";
+  static String secondaryPortKeyValue = "secondaryPort";
+  String primaryServer = PRIMARY_SERVERNAME;
+  String secondaryServer = SECONDARY_SERVERNAME;
+  int primaryIpPort = DEFAULT_SERVERPORT;
+  int secondaryIpPort = DEFAULT_SERVERPORT;
   Map<String, dynamic> toMap() {
     return {
-      masterIpAddressKeyValue: masterIpAddress,
-      masterIpPortKeyValue: masterIpPort,
-      backupIpAddressKeyValue: backupIpAddress,
-      backupIpPortKeyValue: backupIpPort
+      primaryKeyValue: primaryServer,
+      primaryPortKeyValue: primaryIpPort,
+      secondaryKeyValue: secondaryServer,
+      secondaryPortKeyValue: secondaryIpPort
     };
   }
 }
@@ -58,23 +59,23 @@ class BackChannelClient extends HyperCubeClient {
       DocumentReference documentReference = collection.document("globalConfig");
 
       var config = await documentReference.get();
-      if (config.map.containsKey(CloudConfigInfo.masterIpAddressKeyValue)) {
-        _cloudConfigInfo.masterIpAddress =
-            config.map[CloudConfigInfo.masterIpAddressKeyValue];
+      if (config.map.containsKey(CloudConfigInfo.primaryKeyValue)) {
+        _cloudConfigInfo.primaryServer =
+            config.map[CloudConfigInfo.primaryKeyValue];
         found = true;
       }
-      if (config.map.containsKey(CloudConfigInfo.masterIpPortKeyValue)) {
-        _cloudConfigInfo.masterIpPort =
-            config.map[CloudConfigInfo.masterIpPortKeyValue];
+      if (config.map.containsKey(CloudConfigInfo.primaryPortKeyValue)) {
+        _cloudConfigInfo.primaryIpPort =
+            config.map[CloudConfigInfo.primaryPortKeyValue];
       }
-      if (config.map.containsKey(CloudConfigInfo.backupIpAddressKeyValue)) {
-        _cloudConfigInfo.backupIpAddress =
-            config.map[CloudConfigInfo.backupIpAddressKeyValue];
+      if (config.map.containsKey(CloudConfigInfo.secondaryKeyValue)) {
+        _cloudConfigInfo.secondaryServer =
+            config.map[CloudConfigInfo.secondaryKeyValue];
         found = true;
       }
-      if (config.map.containsKey(CloudConfigInfo.backupIpPortKeyValue)) {
-        _cloudConfigInfo.backupIpPort =
-            config.map[CloudConfigInfo.backupIpPortKeyValue];
+      if (config.map.containsKey(CloudConfigInfo.secondaryPortKeyValue)) {
+        _cloudConfigInfo.secondaryIpPort =
+            config.map[CloudConfigInfo.secondaryPortKeyValue];
       }
     } catch (e) {
       initCloudConfig();
@@ -83,14 +84,31 @@ class BackChannelClient extends HyperCubeClient {
     return found;
   }
 
-  init(
-      {String remoteIpAddressString = HyperCubeClient.DEFAULT_SERVERIP,
-      int remoteIpPort = HyperCubeClient.DEFAULT_SERVERPORT}) async {
+  init(ConnectionInfo connectionInfo,
+      {HyperCubeServerAddresses? paramServerAddresses}) async {
     packetCtrl.init();
-    await getCloudConfig(cloudConfigInfo);
-    return super.init(
-        remoteIpAddressString: cloudConfigInfo.masterIpAddress,
-        remoteIpPort: cloudConfigInfo.masterIpPort);
+
+    HyperCubeServerAddresses? hyperCubeServerAddressing;
+
+    // if input address is given use that
+    if (paramServerAddresses != null) {
+      hyperCubeServerAddressing = paramServerAddresses;
+    }
+
+    bool res = await getCloudConfig(cloudConfigInfo);
+
+    // if there is a config from the cloud, use that
+    if (res) {
+      hyperCubeServerAddressing = HyperCubeServerAddresses.setDetail(
+          cloudConfigInfo.primaryServer,
+          cloudConfigInfo.primaryIpPort,
+          cloudConfigInfo.secondaryServer,
+          cloudConfigInfo.secondaryIpPort);
+    }
+
+    res = super
+        .init(connectionInfo, paramServerAddresses: hyperCubeServerAddressing);
+    return res;
   }
 
   @override

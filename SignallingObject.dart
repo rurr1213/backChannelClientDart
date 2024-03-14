@@ -346,7 +346,7 @@ class SignallingObject {
   }
 
   bool sendConnectionInfo() {
-    connectionInfo.serverIpAddress = hyperCubeClient.ipAddress;
+    connectionInfo.serverIpAddress = hyperCubeClient.activeServerAddress.ip;
     return sendSigCommand(HYPERCUBECOMMANDS.CONNECTIONINFO, connectionInfo,
         "HyperCubeClient::SignallingObject()::sendConnectionInfo()");
   }

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:async';
 
@@ -10,13 +11,50 @@ import '../ftlTools/Logger.dart';
 import '../ftlTools/network/Packet.dart';
 import 'SignallingObject.dart';
 
+const String PRIMARY_SERVERNAME = "primary.hyperkube.net";
+const String SECONDARY_SERVERNAME = "secondary.hyperkube.net";
+const int DEFAULT_SERVERPORT = 5054;
+
+class HyperCubeServerAddress {
+  String hostName;
+  String ip = "";
+  int port;
+  HyperCubeServerAddress.set(this.hostName, this.port);
+  set(_name, _port) {
+    hostName = _name;
+    port = _port;
+  }
+}
+
+class HyperCubeServerAddressPrimary extends HyperCubeServerAddress {
+  HyperCubeServerAddressPrimary()
+      : super.set(PRIMARY_SERVERNAME, DEFAULT_SERVERPORT);
+}
+
+class HyperCubeServerAddressSecondary extends HyperCubeServerAddress {
+  HyperCubeServerAddressSecondary()
+      : super.set(SECONDARY_SERVERNAME, DEFAULT_SERVERPORT);
+}
+
+class HyperCubeServerAddresses {
+  HyperCubeServerAddressPrimary primary = HyperCubeServerAddressPrimary();
+  HyperCubeServerAddress secondary = HyperCubeServerAddressSecondary();
+  HyperCubeServerAddresses.set(this.primary, this.secondary);
+  HyperCubeServerAddresses();
+  HyperCubeServerAddresses.setDetail(String _primary, int _primaryPort,
+      String _secondary, int _secondaryPort) {
+    primary.set(_primary, _primaryPort);
+    primary.set(_secondary, _secondaryPort);
+  }
+}
+
 class HyperCubeClient {
   final Logger logger;
   final TcpManager tcpManager;
   SignallingObject? signallingObject;
   bool connectionOpen = false;
-  String ipAddress = "";
-  int ipPort = 0;
+//  String ipAddress = "";
+//  int ipPort = 0;
   int numConnectionAttempts = 0;
   int numSentMsgs = 0;
   int numRecvMsgs = 0;
@@ -24,20 +62,32 @@ class HyperCubeClient {
   int _connectionPeriodSecs = 10;
   String connectedGroupName = "";
   bool alreadyWarnedOfConnectFailure = false;
-
-  static const String DEFAULT_SERVERIP = "127.0.0.1";
-  static const int DEFAULT_SERVERPORT = 5054;
+  HyperCubeServerAddresses serverAddresses = HyperCubeServerAddresses();
+  HyperCubeServerAddress activeServerAddress = HyperCubeServerAddressPrimary();
 
   HyperCubeClient(this.logger) : tcpManager = TcpManager("Hyper", logger) {
     signallingObject = SignallingObject(logger, this);
+  }
+
+  Future<bool> dnsLookup(HyperCubeServerAddress _hyperCubeServerAddress) async {
+    final result = await InternetAddress.lookup(
+        _hyperCubeServerAddress.hostName,
+        type: InternetAddressType.IPv4);
+    if (!result.isNotEmpty) return false;
+    InternetAddress internetAddress = result[0];
+    _hyperCubeServerAddress.ip = internetAddress.address;
+    return true;
   }
 
   Future<bool> openConnection() async {
     connectionTimer = null;
 
     if (!tcpManager.isOpen()) {
-      connectionOpen = await tcpManager.open(
-          onTcpReceive, onTcpClose, ipAddress, ipPort, false);
+      if (!await dnsLookup(activeServerAddress)) return false;
+
+      connectionOpen = await tcpManager.open(onTcpReceive, onTcpClose,
+          activeServerAddress.ip, activeServerAddress.port, false);
+
       logger.setStateInt(
           "HyperCubeClient-NumConnectionAttempt", ++numConnectionAttempts);
       logger.setStateString("HyperCubeClient-ConnectionState",
@@ -45,16 +95,26 @@ class HyperCubeClient {
 
       if (connectionOpen) {
         logger.add(EVENTTYPE.INFO, "HyperCubeClient::openConnection()",
-            "Opened connection to $ipAddress:$ipPort");
+            "Opened connection to $activeServerAddress.ip:$activeServerAddress.port");
         alreadyWarnedOfConnectFailure = false;
         onConnection();
       } else {
         if (!alreadyWarnedOfConnectFailure)
           logger.add(EVENTTYPE.WARNING, "HyperCubeClient::openConnection()",
-              "connection failed to $ipAddress:$ipPort");
+              "connection failed to $activeServerAddress.ip:$activeServerAddress.port");
         alreadyWarnedOfConnectFailure = true;
       }
     }
+
+    // if open fails, rotate servers fir next attempt
+    if (connectionOpen == false) {
+      if (activeServerAddress == serverAddresses.primary) {
+        activeServerAddress = serverAddresses.secondary;
+      } else {
+        activeServerAddress = serverAddresses.primary;
+      }
+    }
+
     return connectionOpen;
   }
 
@@ -92,14 +152,14 @@ class HyperCubeClient {
 
   onConnectionDataClosed() {}
 
-  bool init(
-      {String remoteIpAddressString = DEFAULT_SERVERIP,
-      int remoteIpPort = DEFAULT_SERVERPORT}) {
-    ipAddress = remoteIpAddressString;
-    ipPort = remoteIpPort;
-    if (ipPort == 0) return false;
+  bool init(ConnectionInfo connectionInfo,
+      {HyperCubeServerAddresses? paramServerAddresses}) {
+    if (paramServerAddresses != null) {
+      serverAddresses = paramServerAddresses;
+    }
+    activeServerAddress = serverAddresses.primary;
+    setConnectionInfo(connectionInfo);
     startPeriodicConnectionAttempts(true);
-
     return true;
   }
 
@@ -181,7 +241,7 @@ class HyperCubeClient {
 
   dynamic onTcpClose() {
     logger.add(EVENTTYPE.WARNING, "HyperCubeClient::onTcpClose()",
-        "connection to $ipAddress:$ipPort closed");
+        "connection to ${activeServerAddress.hostName}:${activeServerAddress.port} closed");
     onDisconnection();
     connectionOpen = false;
     logger.setStateString("HyperCubeClient-ConnectionState",
