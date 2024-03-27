@@ -264,8 +264,14 @@ class SignallingObject {
         default:
       }
     } catch (e) {
-      logger.add(EVENTTYPE.ERROR, "SignallingObject::processMsgJson()",
-          jsonString + ", field not found " + e.toString());
+      logger.add(
+          EVENTTYPE.ERROR,
+          "SignallingObject::processMsgJson()",
+          jsonString +
+              ", field not found " +
+              e.toString() +
+              " on command " +
+              hyperCubeCommand.command.toString());
     }
     return processed;
   }
