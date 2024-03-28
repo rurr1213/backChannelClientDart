@@ -137,14 +137,18 @@ class SignallingObject {
     SignallingObjectState prevState = state;
     bool _status = hyperCubeCommand.status;
     GroupsInfoList getGroupsInfoList = GroupsInfoList();
-    if (hyperCubeCommand.jsonData != null) {
+    if (hyperCubeCommand.jsonData == null) return false;
+    if (!_status) return true; // no group list data found
+    int len = 0;
+    try {
       dynamic jgroupInfo = hyperCubeCommand.jsonData;
       getGroupsInfoList.fromJson(jgroupInfo);
-    }
-    List<GroupInfo> _groupInfoList = getGroupsInfoList.list;
+      List<GroupInfo> _groupInfoList = getGroupsInfoList.list;
+      len = _groupInfoList.length;
+      hyperCubeClient.onGroupInfoList(_groupInfoList);
+    } catch (e) {}
     logger.add(EVENTTYPE.INFO, "SignallingObject::onGetGroupsAck()",
-        " received onGetGroupsAck status:$_status, items: ${_groupInfoList.length} state:$prevState>$state");
-    hyperCubeClient.onGroupInfoList(_groupInfoList);
+        " received onGetGroupsAck status:$_status, items: $len state:$prevState>$state");
     //if (state != SignallingObjectState.closedForData) onConnectionDataClosed();
     return true;
   }
@@ -153,13 +157,17 @@ class SignallingObject {
     SignallingObjectState prevState = state;
     bool _status = hyperCubeCommand.status;
     LineList lineList = LineList();
-    if (hyperCubeCommand.jsonData != null) {
+    if (hyperCubeCommand.jsonData == null) return false;
+    if (!_status) return true; // no group list data found
+    int len = 0;
+    try {
       dynamic jgroupInfo = hyperCubeCommand.jsonData;
       lineList.fromJson(jgroupInfo);
       hyperCubeClient.onLogLines(lineList);
-    }
+      len = lineList.list.length;
+    } catch (e) {}
     logger.add(EVENTTYPE.INFO, "SignallingObject::onLogLinesAck()",
-        " received onGetGroupsAck status:$_status, items: ${lineList.list.length} state:$prevState>$state");
+        " received onGetGroupsAck status:$_status, items: $len state:$prevState>$state");
     //hyperCubeClient.onLogLinesList(lineList);
     return true;
   }
@@ -168,13 +176,17 @@ class SignallingObject {
     SignallingObjectState prevState = state;
     bool _status = hyperCubeCommand.status;
     LineList lineList = LineList();
-    if (hyperCubeCommand.jsonData != null) {
+    if (hyperCubeCommand.jsonData == null) return false;
+    if (!_status) return true; // no group list data found
+    int len = 0;
+    try {
       dynamic jgroupInfo = hyperCubeCommand.jsonData;
       lineList.fromJson(jgroupInfo);
       hyperCubeClient.onStatusLines(lineList);
-    }
+      len = lineList.list.length;
+    } catch (e) {}
     logger.add(EVENTTYPE.INFO, "SignallingObject::onStatusLinesAck()",
-        " received onGetGroupsAck status:$_status, items: ${lineList.list.length} state:$prevState>$state");
+        " received onGetGroupsAck status:$_status, items: $len state:$prevState>$state");
     //hyperCubeClient.onLogLinesList(lineList);
     return true;
   }
