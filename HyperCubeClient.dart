@@ -70,19 +70,25 @@ class HyperCubeClient {
   }
 
   Future<bool> dnsLookup(HyperCubeServerAddress _hyperCubeServerAddress) async {
-    final result = await InternetAddress.lookup(
-        _hyperCubeServerAddress.hostName,
-        type: InternetAddressType.IPv4);
-    if (!result.isNotEmpty) {
-      logger.add(EVENTTYPE.WARNING, "HyperCubeClient::dnsLookup()",
-          "lookup of $_hyperCubeServerAddress failed");
+    try {
+      final result = await InternetAddress.lookup(
+          _hyperCubeServerAddress.hostName,
+          type: InternetAddressType.IPv4);
+      if (!result.isNotEmpty) {
+        logger.add(EVENTTYPE.WARNING, "HyperCubeClient::dnsLookup()",
+            "lookup of $_hyperCubeServerAddress failed");
+        return false;
+      }
+      InternetAddress internetAddress = result[0];
+      logger.add(EVENTTYPE.INFO, "HyperCubeClient::dnsLookup()",
+          "lookup of $_hyperCubeServerAddress returned ${internetAddress.address}");
+      _hyperCubeServerAddress.ip = internetAddress.address;
+      return true;
+    } catch (e) {
+      logger.add(EVENTTYPE.NOTE, "HyperCubeClient::dnsLookup()",
+          "lookup of $_hyperCubeServerAddress failed. Not found");
       return false;
     }
-    InternetAddress internetAddress = result[0];
-    logger.add(EVENTTYPE.INFO, "HyperCubeClient::dnsLookup()",
-        "lookup of $_hyperCubeServerAddress returned ${internetAddress.address}");
-    _hyperCubeServerAddress.ip = internetAddress.address;
-    return true;
   }
 
   Future<bool> openConnection() async {
