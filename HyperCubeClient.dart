@@ -44,7 +44,7 @@ class HyperCubeServerAddresses {
   HyperCubeServerAddresses.setDetail(String _primary, int _primaryPort,
       String _secondary, int _secondaryPort) {
     primary.set(_primary, _primaryPort);
-    primary.set(_secondary, _secondaryPort);
+    secondary.set(_secondary, _secondaryPort);
   }
 }
 
