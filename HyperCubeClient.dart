@@ -189,8 +189,14 @@ class HyperCubeClient {
   }
 
   dynamic onTcpReceive(Uint8List event) {
-    Packet packet = Packet(event);
-    onPacket(packet);
+    try {
+      Packet packet = Packet(event);
+      onPacket(packet);
+    } on SocketException catch (e) {
+      String errorMessage = e.toString();
+      logger.add(EVENTTYPE.WARNING, "HyperCubeClient::onTcpReceive()",
+          "exception received $errorMessage");
+    }
   }
 
   onPacket(Packet packet) {}
