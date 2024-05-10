@@ -91,11 +91,22 @@ class HyperCubeClient {
     }
   }
 
+  switchActiveServers() {
+    if (activeServerAddress == serverAddresses.primary) {
+      activeServerAddress = serverAddresses.secondary;
+    } else {
+      activeServerAddress = serverAddresses.primary;
+    }
+  }
+
   Future<bool> openConnection() async {
     connectionTimer = null;
 
     if (!tcpManager.isOpen()) {
-      if (!await dnsLookup(activeServerAddress)) return false;
+      if (!await dnsLookup(activeServerAddress)) {
+        switchActiveServers();
+        return false;
+      }
 
       connectionOpen = await tcpManager.open(onTcpReceive, onTcpClose,
           activeServerAddress.ip, activeServerAddress.port, false);
@@ -120,11 +131,7 @@ class HyperCubeClient {
 
     // if open fails, rotate servers fir next attempt
     if (connectionOpen == false) {
-      if (activeServerAddress == serverAddresses.primary) {
-        activeServerAddress = serverAddresses.secondary;
-      } else {
-        activeServerAddress = serverAddresses.primary;
-      }
+      switchActiveServers();
     }
 
     return connectionOpen;
