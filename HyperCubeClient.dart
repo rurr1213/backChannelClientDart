@@ -75,13 +75,13 @@ class HyperCubeClient {
           _hyperCubeServerAddress.hostName,
           type: InternetAddressType.IPv4);
       if (!result.isNotEmpty) {
-        logger.add(EVENTTYPE.WARNING, "HyperCubeClient::dnsLookup()",
+        logger.add(EVENTTYPE.NOTE, "HyperCubeClient::dnsLookup()",
             "lookup of $_hyperCubeServerAddress failed");
         return false;
       }
       InternetAddress internetAddress = result[0];
-      logger.add(EVENTTYPE.INFO, "HyperCubeClient::dnsLookup()",
-          "lookup of $_hyperCubeServerAddress returned ${internetAddress.address}");
+      // logger.add(EVENTTYPE.INFO, "HyperCubeClient::dnsLookup()",
+      //    "lookup of $_hyperCubeServerAddress returned ${internetAddress.address}");
       _hyperCubeServerAddress.ip = internetAddress.address;
       return true;
     } catch (e) {
