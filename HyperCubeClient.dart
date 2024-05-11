@@ -284,7 +284,7 @@ class HyperCubeClient {
     Uint8List data = Uint8List(bufferSize);
     SerDes sd = SerDes(data);
     int size = msg.serialize(sd);
-    sendBinary(data, size);
+    if (!sendBinary(data, size)) return false;
     assert(size < bufferSize); // else buffer is too small
     return size != 0;
   }
@@ -312,11 +312,6 @@ class HyperCubeClient {
   }
 
   bool getConnectionInfo(List<String> _list) {
-    Map<String, dynamic> _map = signallingObject!.connectionInfoAck.toJson();
-    _map.forEach((key, value) {
-      _list.add("$key:$value");
-    });
-
-    return true;
+    return signallingObject!.getConnectionInfo(_list);
   }
 }

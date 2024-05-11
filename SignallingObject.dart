@@ -402,6 +402,8 @@ class SignallingObject {
   }
 
   bool unsubscribe(String _groupName) {
+    if ((state == SignallingObjectState.disconnected) ||
+        (state == SignallingObjectState.instantiated)) return false;
     SubscriberInfo subscriberInfo = SubscriberInfo();
     subscriberInfo.groupName = _groupName;
     return sendSigCommand(HYPERCUBECOMMANDS.UNSUBSCRIBE, subscriberInfo,
@@ -409,6 +411,8 @@ class SignallingObject {
   }
 
   bool getGroups(String _searchWord, {startingIndex = 0, maxItems = 10}) {
+    if ((state == SignallingObjectState.disconnected) ||
+        (state == SignallingObjectState.instantiated)) return false;
     GetGroupsInfo getGroupsInfo = GetGroupsInfo();
     getGroupsInfo.searchWord = _searchWord;
     getGroupsInfo.startingIndex = startingIndex;
@@ -418,6 +422,8 @@ class SignallingObject {
   }
 
   bool getLogLines(startingIndex, maxItems) {
+    if ((state == SignallingObjectState.disconnected) ||
+        (state == SignallingObjectState.instantiated)) return false;
     LineList lineList = LineList();
     lineList.startingIndex = startingIndex;
     lineList.numItems = maxItems;
@@ -426,10 +432,23 @@ class SignallingObject {
   }
 
   bool getStatusLines(startingIndex, maxItems) {
+    if ((state == SignallingObjectState.disconnected) ||
+        (state == SignallingObjectState.instantiated)) return false;
     LineList lineList = LineList();
     lineList.startingIndex = startingIndex;
     lineList.numItems = maxItems;
     return sendSigCommand(HYPERCUBECOMMANDS.GETSTATUS, lineList,
         "HyperCubeClient::SignallingObject()::getStatusLines()");
   }
+
+  bool getConnectionInfo(List<String> _list) {
+    if ((state == SignallingObjectState.disconnected) ||
+        (state == SignallingObjectState.instantiated)) return false;
+    Map<String, dynamic> _map = connectionInfoAck.toJson();
+    _map.forEach((key, value) {
+      _list.add("$key:$value");
+    });
+    return true;
+  }
+
 }
