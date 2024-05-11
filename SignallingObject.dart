@@ -354,6 +354,8 @@ class SignallingObject {
     SigMsg sigMsg = SigMsg(jsonString);
     bool stat = hyperCubeClient.sendMsg(sigMsg);
 
+    if (callingFunctionName == "") return stat; // no logging
+
     if (stat)
       logger.add(
           EVENTTYPE.INFO, callingFunctionName, statusString + " succeded");
@@ -428,7 +430,7 @@ class SignallingObject {
     lineList.startingIndex = startingIndex;
     lineList.numItems = maxItems;
     return sendSigCommand(HYPERCUBECOMMANDS.GETLOGLINES, lineList,
-        "HyperCubeClient::SignallingObject()::getLogLines()");
+        "");
   }
 
   bool getStatusLines(startingIndex, maxItems) {
@@ -438,7 +440,7 @@ class SignallingObject {
     lineList.startingIndex = startingIndex;
     lineList.numItems = maxItems;
     return sendSigCommand(HYPERCUBECOMMANDS.GETSTATUS, lineList,
-        "HyperCubeClient::SignallingObject()::getStatusLines()");
+        "");
   }
 
   bool getConnectionInfo(List<String> _list) {
@@ -450,5 +452,4 @@ class SignallingObject {
     });
     return true;
   }
-
 }
